@@ -1,8 +1,0 @@
-{{extend 'layout.html'}}
-{{response.title = 'Sem permissão'}}
-<div class="cartao cartao-estreito" style="margin:0 auto">
-  <h1>Você não tem permissão para esta área</h1>
-  <p class="texto-2">Sua conta tem os papéis: {{=', '.join(sorted(MEUS_PAPEIS)) or 'nenhum'}}.
-     Peça a um administrador para ajustar seus papéis, se necessário.</p>
-  <a class="btn btn-primario" href="{{=pagina_inicial_do_papel()}}">Ir para a minha página inicial</a>
-</div>
