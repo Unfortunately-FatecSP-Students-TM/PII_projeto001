@@ -4,6 +4,7 @@
 # Permitir somente os arquivos desejados
 !/capturas/
 !/modelagem/
+!/imagens/
 !/README.md
 !/iniciar.bat
 !/iniciar.sh
