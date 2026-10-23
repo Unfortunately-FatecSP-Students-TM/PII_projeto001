@@ -1,0 +1,12 @@
+# Ignorar tudo na raiz
+/*
+
+# Permitir somente os arquivos desejados
+!/capturas/
+!/modelagem/
+!/README.md
+!/iniciar.bat
+!/iniciar.sh
+!/loja_didatica_2_v2.py
+!/requirements.txt
+!/.gitignore
