@@ -1,0 +1,70 @@
+{{extend 'layout.html'}}
+{{response.title = 'Pagamento PIX'}}
+<div class="cabecalho-pagina">
+  <div>
+    <h1>Pagamento do pedido <span class="mono">{{=pedido.codigo}}</span></h1>
+    <p>Escaneie o QR Code ou copie o código. Depois avise a loja que pagou — um operador confirma o recebimento.</p>
+  </div>
+</div>
+
+<div class="pix">
+  <div class="pix-cartao">
+    <div class="titulo-pix">Valor a pagar</div>
+    <div class="valor-pix">{{=moeda(pix.valor)}}</div>
+    {{if qr:}}
+    <img class="qr" src="{{=qr}}" alt="QR Code do PIX" width="240" height="240">
+    {{else:}}
+    <p class="texto-2 pequeno">(instale a biblioteca <code>qrcode</code> para ver o QR Code)</p>
+    {{pass}}
+    <details>
+      <summary class="pequeno texto-2" style="cursor:pointer">Mostrar código copia e cola</summary>
+      <div class="copia-cola" id="codigo-pix">{{=pix.copia_cola}}</div>
+    </details>
+    <div class="acoes" style="justify-content:center">
+      <button class="btn btn-secundario" type="button" id="copiar-pix">Copiar código PIX</button>
+    </div>
+    <p class="fake">PIX fictício para fins didáticos — a chave {{=CHAVE_PIX_FAKE}} não existe e nada é cobrado.</p>
+  </div>
+
+  <div>
+    <div class="cartao">
+      <h2>Situação do pagamento</h2>
+      <p id="status-pix" data-pedido="{{=pedido.id}}" data-status="{{=pix.status}}">
+        <span class="etiqueta {{=pix.status}}">{{=rotulo_pix(pix.status)}}</span>
+        {{if pix.status in ('gerado', 'informado'):}}<span class="pequeno texto-3"> · esta página atualiza sozinha</span>{{pass}}
+      </p>
+      {{if pix.status == 'gerado':}}
+      <form method="post" action="{{=URL('cliente', 'informar_pagamento', args=[pedido.id])}}">
+        <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+        <button class="btn btn-primario" type="submit">Já paguei — avisar a loja</button>
+      </form>
+      {{elif pix.status == 'informado':}}
+      <p class="texto-2">Você informou o pagamento em {{=data_br(pix.informado_em)}}. Aguarde a confirmação do operador.</p>
+      {{elif pix.status == 'confirmado':}}
+      <p class="texto-2">Pagamento confirmado em {{=data_br(pix.decidido_em)}}. O pedido está sendo preparado.</p>
+      {{else:}}
+      <p class="texto-2">Pagamento recusado{{if pix.observacao:}}: {{=pix.observacao}}{{pass}}. O pedido foi cancelado e o estoque devolvido.</p>
+      {{pass}}
+      <div class="acoes mt-1">
+        <a class="btn btn-secundario" href="{{=URL('cliente', 'pedido', args=[pedido.id])}}">Ver pedido</a>
+        <a class="btn btn-discreto" href="{{=URL('default', 'index')}}">Continuar comprando</a>
+      </div>
+    </div>
+
+    <div class="cartao">
+      <h2>Resumo do pedido</h2>
+      <div class="tabela-wrap">
+        <table class="tabela">
+          <thead><tr><th>Produto</th><th class="num">Qtd</th><th class="num">Unitário</th><th class="num">Subtotal</th></tr></thead>
+          <tbody>
+            {{for i in itens:}}
+            <tr><td>{{=i.nome_produto}}</td><td class="num">{{=i.quantidade}}</td><td class="num">{{=moeda(i.preco_unitario)}}</td><td class="num">{{=moeda(i.subtotal)}}</td></tr>
+            {{pass}}
+            <tr><td colspan="3"><strong>Total</strong></td><td class="num"><strong>{{=moeda(pedido.total)}}</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="pequeno texto-2 mt-1">Rastreio: <span class="mono">{{=pedido.codigo_rastreio}}</span> · Entrega em até {{=pedido.prazo_dias}} dias úteis após a confirmação · txid <span class="mono">{{=pix.txid}}</span></p>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,112 @@
+@startuml atividades
+title Loja Didática 2 (v2) — Diagrama de Atividades (compra, aprovação do PIX e entrega)
+
+skinparam activity {
+  BackgroundColor #EEF4FD
+  BorderColor #1E4FA3
+  ArrowColor #1E4FA3
+  StartColor #1E4FA3
+  EndColor #0B2A5B
+  DiamondBackgroundColor #FFF7ED
+  DiamondBorderColor #D97706
+}
+skinparam swimlaneBackgroundColor #F8FAFC
+skinparam swimlaneBorderColor #94A3B8
+
+|Cliente (navegador)|
+start
+:Acessa o catálogo
+(React <Catalogo/> chama api/produtos);
+
+if (Possui conta?) then (não)
+  :Preenche cadastro
+(nome, e-mail ×2, telefone, senha ×2);
+  |Sistema (web2py)|
+  :Valida dados, grava auth_user,
+inclui no grupo "cliente" e faz login;
+  |Cliente (navegador)|
+else (sim)
+  :Informa e-mail e senha;
+  |Sistema (web2py)|
+  :auth.login_bare() e sessão;
+  |Cliente (navegador)|
+endif
+
+repeat
+  :Escolhe produto e quantidade
+e clica "Adicionar";
+  |Sistema (web2py)|
+  :POST api/carrinho_adicionar
+(JSON + X-CSRF-Token);
+  if (Quantidade <= estoque
+e produto ativo?) then (sim)
+    :Soma no carrinho_item
+do usuário;
+  else (não)
+    :Responde 400 com o motivo
+(toast de erro no React);
+  endif
+  |Cliente (navegador)|
+repeat while (Mais itens?) is (sim)
+->não;
+
+:Abre o carrinho (React <Carrinho/>),
+ajusta quantidades e clica
+"Finalizar e pagar com PIX";
+
+|Sistema (web2py)|
+:criar_pedido_do_carrinho();
+:Cria pedido (PED-XXXXXXXX,
+rastreio BR...BR);
+:Para cada item: registrar_movimento('saida')
+UPDATE produto SET estoque = estoque - qtd
+WHERE id = ? AND estoque >= qtd;
+if (Alguma baixa falhou?) then (sim)
+  :db.rollback();
+  :Responde 409 "Estoque insuficiente";
+  |Cliente (navegador)|
+  :Carrinho recarregado
+com estoque atual;
+  stop
+else (não)
+  :Grava pedido_item (snapshot de preço),
+gera pagamento_pix (BR Code + CRC16),
+esvazia o carrinho e db.commit();
+endif
+
+|Cliente (navegador)|
+:Vê QR Code e "copia e cola";
+:Clica "Já paguei";
+|Sistema (web2py)|
+:PIX: gerado → informado;
+:loja.js consulta api/pix_status
+a cada 5 s;
+
+|Operador|
+:Abre a fila (React <PainelPix/>,
+api/pix_pendentes a cada 8 s);
+:Confere o pagamento (fictício);
+if (Recebimento confirmado?) then (sim)
+  |Sistema (web2py)|
+  :PIX → confirmado
+Pedido → pago;
+  |Operador|
+  :Avança a entrega:
+separando → enviado →
+em entrega → entregue;
+  |Sistema (web2py)|
+  :Cliente acompanha a linha do tempo
+em cliente/pedido;
+  stop
+else (não)
+  |Sistema (web2py)|
+  :PIX → recusado;
+  :cancelar_pedido(): para cada item
+registrar_movimento('devolucao');
+  :Pedido → cancelado;
+  |Cliente (navegador)|
+  :Tela do PIX recarrega e mostra
+"recusado"; pode comprar de novo;
+  stop
+endif
+@enduml

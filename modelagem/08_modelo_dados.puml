@@ -1,0 +1,166 @@
+@startuml modelo_dados
+title Loja Didática 2 (v2) — Modelo de Dados (SQLite via pyDAL)
+
+skinparam class {
+  BackgroundColor #EEF4FD
+  BorderColor #1E4FA3
+  ArrowColor #1E4FA3
+  HeaderBackgroundColor #DBE7FA
+  FontColor #132038
+}
+skinparam linetype ortho
+set namespaceSeparator none
+hide circle
+hide methods
+
+entity "auth_user" as auth_user {
+  * id : INTEGER <<PK>>
+  --
+  first_name, last_name : VARCHAR(128)
+  * email : VARCHAR(512) <<unique>>
+  * password : VARCHAR(512)  (hash PBKDF2)
+  telefone : VARCHAR(20)
+  registration_key : VARCHAR(512)  ('blocked' bloqueia)
+  reset_password_key, registration_id
+}
+entity "auth_group" as auth_group {
+  * id : INTEGER <<PK>>
+  --
+  * role : VARCHAR(512)  (cliente | vendedor | operador | administrador)
+  description : TEXT
+}
+entity "auth_membership" as auth_membership {
+  * id : INTEGER <<PK>>
+  --
+  * user_id : INTEGER <<FK auth_user>>
+  * group_id : INTEGER <<FK auth_group>>
+}
+entity "categoria" as categoria {
+  * id : INTEGER <<PK>>
+  --
+  * nome : VARCHAR(60) <<unique>>
+  descricao : VARCHAR(200)
+}
+entity "produto" as produto {
+  * id : INTEGER <<PK>>
+  --
+  * codigo : VARCHAR(12) <<unique>>  (PRD-NNNNN)
+  * nome : VARCHAR(120)
+  descricao : TEXT
+  categoria : INTEGER <<FK categoria, SET NULL>>
+  * preco : DECIMAL(10,2)
+  * estoque : INTEGER  (>= 0)
+  * prazo_dias : INTEGER
+  imagem : VARCHAR(64)  (<codigo>.jpg)
+  ativo : BOOLEAN
+  vendedor : INTEGER <<FK auth_user, SET NULL>>
+  criado_em, atualizado_em : DATETIME
+}
+entity "movimento_estoque" as movimento_estoque {
+  * id : INTEGER <<PK>>
+  --
+  * produto : INTEGER <<FK produto, CASCADE>>
+  * tipo : VARCHAR(12)  (entrada | saida | devolucao | ajuste)
+  * quantidade : INTEGER  (+ entra / − sai)
+  * saldo_apos : INTEGER
+  motivo : VARCHAR(200)
+  pedido : INTEGER <<FK pedido, SET NULL>>
+  usuario : INTEGER <<FK auth_user, SET NULL>>
+  criado_em : DATETIME
+}
+entity "carrinho_item" as carrinho_item {
+  * id : INTEGER <<PK>>
+  --
+  * usuario : INTEGER <<FK auth_user, CASCADE>>
+  * produto : INTEGER <<FK produto, CASCADE>>
+  * quantidade : INTEGER
+  criado_em : DATETIME
+}
+entity "pedido" as pedido {
+  * id : INTEGER <<PK>>
+  --
+  * codigo : VARCHAR(16) <<unique>>  (PED-XXXXXXXX)
+  * codigo_rastreio : VARCHAR(20)  (BR..........BR)
+  cliente : INTEGER <<FK auth_user, SET NULL>>
+  * total : DECIMAL(10,2)
+  * status : VARCHAR(24)  (aguardando_pagamento | pago | separando |
+    enviado | em_entrega | entregue | cancelado)
+  prazo_dias : INTEGER
+  data_pedido, data_pagamento, data_cancelamento : DATETIME
+  observacao : TEXT
+}
+entity "pedido_item" as pedido_item {
+  * id : INTEGER <<PK>>
+  --
+  * pedido : INTEGER <<FK pedido, CASCADE>>
+  produto : INTEGER <<FK produto, SET NULL>>
+  codigo_produto : VARCHAR(12)   (snapshot)
+  nome_produto : VARCHAR(120)    (snapshot)
+  * preco_unitario : DECIMAL(10,2)
+  * quantidade : INTEGER
+  * subtotal : DECIMAL(10,2)
+}
+entity "pagamento_pix" as pagamento_pix {
+  * id : INTEGER <<PK>>
+  --
+  * pedido : INTEGER <<FK pedido, CASCADE, unique>>
+  * txid : VARCHAR(35) <<unique>>
+  * copia_cola : TEXT  (BR Code EMV com CRC16)
+  * valor : DECIMAL(10,2)
+  * status : VARCHAR(12)  (gerado | informado | confirmado | recusado)
+  criado_em, informado_em, decidido_em : DATETIME
+  operador : INTEGER <<FK auth_user, SET NULL>>
+  observacao : VARCHAR(200)
+}
+entity "reclamacao" as reclamacao {
+  * id : INTEGER <<PK>>
+  --
+  * pedido : INTEGER <<FK pedido, CASCADE, unique>>
+  cliente : INTEGER <<FK auth_user, SET NULL>>
+  * texto : TEXT
+  * status : VARCHAR(12)  (aberta | concluida | recusada)
+  resposta : TEXT
+  respondida_por : INTEGER <<FK auth_user, SET NULL>>
+  criado_em, respondida_em : DATETIME
+}
+entity "mensagem" as mensagem {
+  * id : INTEGER <<PK>>
+  --
+  * usuario : INTEGER <<FK auth_user, CASCADE>>
+  * texto : TEXT
+  lida : BOOLEAN
+  cancelada : BOOLEAN
+  criado_em : DATETIME
+}
+
+auth_user  ||--o{ auth_membership
+auth_group ||--o{ auth_membership
+categoria  |o--o{ produto
+auth_user  |o--o{ produto : vendedor
+produto    ||--o{ movimento_estoque
+pedido     |o--o{ movimento_estoque
+auth_user  |o--o{ movimento_estoque : usuario
+auth_user  ||--o{ carrinho_item
+produto    ||--o{ carrinho_item
+auth_user  |o--o{ pedido : cliente
+pedido     ||--|{ pedido_item
+produto    |o--o{ pedido_item
+pedido     ||--o| pagamento_pix
+auth_user  |o--o{ pagamento_pix : operador
+pedido     ||--o| reclamacao
+auth_user  |o--o{ reclamacao : cliente
+auth_user  |o--o{ reclamacao : respondida_por
+auth_user  ||--o{ mensagem
+
+note bottom of movimento_estoque
+  Regra de consistência: para cada produto,
+  SUM(movimento_estoque.quantidade) == produto.estoque.
+  Conferida em admin/estoque.
+end note
+note top of auth_user
+  Arquivo: loja.sqlite, na pasta do loja_didatica_2_v2.py.
+  Os metadados de migração do pyDAL ficam dentro do banco
+  (tabela web2py_filesystem, InDBMigrator) — nada de *.table.
+  O Auth cria ainda auth_permission e auth_event (não usadas).
+end note
+@enduml

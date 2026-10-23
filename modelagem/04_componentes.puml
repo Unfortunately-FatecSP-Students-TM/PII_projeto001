@@ -1,0 +1,126 @@
+@startuml componentes
+title Loja Didática 2 (v2) — Diagrama de Componentes
+
+skinparam component {
+  BackgroundColor #EEF4FD
+  BorderColor #1E4FA3
+  ArrowColor #1E4FA3
+  FontColor #132038
+}
+skinparam database {
+  BackgroundColor #F0FDF4
+  BorderColor #16A34A
+}
+skinparam folder {
+  BackgroundColor #F8FAFC
+  BorderColor #94A3B8
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #D97706
+}
+skinparam linetype ortho
+
+node "Navegador (cliente)" {
+  component "Páginas HTML\n(views yatl renderizadas)" as HTML
+  component "loja.css\n(tema azul, responsivo)" as CSS
+  component "loja.js\n(LojaAPI fetch + CSRF, menu,\ntoasts, upload, polling PIX)" as JS
+  component "React 18 + ReactDOM\n(UMD, cópias locais)" as REACT
+  component "Componentes React\n<Catalogo/> <Carrinho/>\n<PainelPix/> <Estoque/>\n(compilado/*.js pré-compilados;\nfonte em *.jsx)" as JSX
+  component "Babel standalone\n(opcional: só se um .jsx\nfor editado)" as BABEL
+  HTML ..> CSS
+  HTML ..> JS
+  HTML ..> REACT
+  HTML ..> JSX
+  HTML ..> BABEL : fallback
+  JSX ..> REACT
+  JSX ..> JS : usa LojaAPI
+}
+
+node "Pasta do loja_didatica_2_v2.py (tudo é extraído aqui)" as PASTA {
+  component "loja_didatica_2_v2.py\n(arquivo único: verifica o ambiente — venv,\nweb2py, aplicação, imagens, banco — e\ninicia o servidor)" as LAUNCHER
+  database "loja.sqlite\n(migrações dentro do banco:\ntabela web2py_filesystem)" as SQLITE
+  folder "imagens/\n<codigo>.jpg 800×600\n<codigo>_min.jpg 400×300" as IMGS
+  artifact "routes.py\n(loja na raiz do site)" as ROUTES
+
+  folder "applications/loja_didatica_2" {
+    folder "models/" {
+      component "db.py\n(DAL, Auth, tabelas, papéis,\nCSRF, RAIZ, utilidades)" as DB
+      component "regras.py\n(estoque, carrinho, pedido,\nPIX fictício, imagens)" as REGRAS
+      component "z_dados_iniciais.py\n(carga inicial)" as SEED
+    }
+    folder "controllers/" {
+      component "default.py\n(catálogo, login, registro,\nperfil, imagem() → stream)" as C_DEF
+      component "cliente.py" as C_CLI
+      component "vendedor.py" as C_VEN
+      component "operador.py" as C_OPE
+      component "admin.py" as C_ADM
+      component "api.py\n(JSON para o React)" as C_API
+    }
+    folder "views/" {
+      component "layout.html + react.html\n+ 32 templates yatl" as VIEWS
+    }
+    folder "static/" {
+      component "css/, js/, js/componentes/*.jsx,\njs/componentes/compilado/*.js,\njs/vendor/ (React), images/" as STATIC
+    }
+    folder "sessions/  errors/  cache/  uploads/" as RUNTIME
+  }
+}
+
+node "web2py (framework, em qualquer pasta:\n./web2py, ../web2py, ~/web2py ou --web2py)" {
+  component "gluon\n(servidor Rocket, roteamento,\nsessões, Auth, DAL, yatl)" as GLUON
+}
+
+component "Pillow\n(processa imagens)" as PIL
+component "qrcode\n(gera QR Code)" as QR
+
+cloud "CDN unpkg (opcional)" as CDN
+
+JS    -->  C_API   : GET/POST JSON\n(X-CSRF-Token)
+JSX   -->  C_API   : via LojaAPI
+HTML  -->  C_DEF   : GET/POST formulários\n(_csrf); GET /imagem/<nome>
+HTML  -->  C_CLI
+HTML  -->  C_VEN   : multipart\n(upload de imagem)
+HTML  -->  C_OPE
+HTML  -->  C_ADM
+HTML  -->  STATIC  : arquivos estáticos
+BABEL ..>  CDN     : baixado só se preciso
+
+LAUNCHER ..> DB     : extrai (1ª execução)
+LAUNCHER ..> IMGS   : grava as imagens de exemplo
+LAUNCHER ..> ROUTES : grava
+LAUNCHER --> GLUON  : importa e inicia\n(applications_parent = esta pasta)
+GLUON --> ROUTES  : lê
+GLUON --> DB      : executa models\na cada requisição
+GLUON --> REGRAS
+GLUON --> SEED
+GLUON --> C_DEF
+GLUON --> VIEWS   : renderiza
+GLUON --> RUNTIME : grava sessões/erros
+C_DEF --> REGRAS
+C_CLI --> REGRAS
+C_VEN --> REGRAS
+C_OPE --> REGRAS
+C_ADM --> REGRAS
+C_API --> REGRAS
+REGRAS --> DB
+DB     --> SQLITE : pyDAL (sqlite3)
+REGRAS --> PIL    : processar_imagem()
+REGRAS --> QR     : qrcode_base64()
+REGRAS --> IMGS   : grava <codigo>.jpg\ne <codigo>_min.jpg
+C_DEF  --> IMGS   : imagem(): response.stream()
+
+note right of C_API
+  Endpoints: produtos, carrinho,
+  carrinho_adicionar/atualizar/remover/finalizar,
+  pix_status, pix_pendentes, pix_decidir,
+  estoque, estoque_ajustar
+end note
+
+note bottom of SQLITE
+  Tabelas: auth_user, auth_group, auth_membership,
+  categoria, produto, movimento_estoque, carrinho_item,
+  pedido, pedido_item, pagamento_pix, reclamacao, mensagem
+  (+ web2py_filesystem com os metadados de migração)
+end note
+@enduml

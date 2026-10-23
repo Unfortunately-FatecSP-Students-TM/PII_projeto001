@@ -1,0 +1,32 @@
+{{extend 'layout.html'}}
+{{response.title = 'Criar conta'}}
+{{def campo(nome, rotulo, tipo='text', valor='', ajuda='', extra=''):}}
+  <div class="campo">
+    <label for="{{=nome}}">{{=rotulo}}</label>
+    <input id="{{=nome}}" type="{{=tipo}}" name="{{=nome}}" value="{{=valor}}" {{=XML(extra)}}
+           {{if erros.get(nome):}}aria-invalid="true"{{pass}}>
+    {{if erros.get(nome):}}<span class="erro-campo">{{=erros[nome]}}</span>{{elif ajuda:}}<span class="ajuda">{{=ajuda}}</span>{{pass}}
+  </div>
+{{return}}
+<div class="cartao cartao-estreito" style="margin:0 auto">
+  <h1>Criar conta de cliente</h1>
+  <p class="texto-2">Vendedores e operadores são cadastrados pelo administrador.</p>
+  <form method="post" action="{{=URL('default', 'registrar')}}">
+    <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+    <div class="campo-linha">
+      {{campo('nome', 'Nome', valor=campos['nome'], extra='required autofocus')}}
+      {{campo('sobrenome', 'Sobrenome', valor=campos['sobrenome'])}}
+    </div>
+    {{campo('email', 'E-mail', 'email', campos['email'], extra='required autocomplete="email"')}}
+    {{campo('email2', 'Confirmar e-mail', 'email', '', extra='required')}}
+    {{campo('telefone', 'Telefone', 'tel', campos['telefone'], 'Ex.: (11) 99999-9999', 'required')}}
+    <div class="campo-linha">
+      {{campo('senha', 'Senha', 'password', '', 'Mínimo de 6 caracteres', 'required autocomplete="new-password"')}}
+      {{campo('senha2', 'Confirmar senha', 'password', '', '', 'required autocomplete="new-password"')}}
+    </div>
+    <div class="formulario-acoes">
+      <button class="btn btn-primario" type="submit">Criar conta</button>
+      <a class="btn btn-secundario" href="{{=URL('default', 'login')}}">Já tenho conta</a>
+    </div>
+  </form>
+</div>

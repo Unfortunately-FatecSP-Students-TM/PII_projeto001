@@ -1,0 +1,136 @@
+@startuml casos_de_uso
+title Loja Didática 2 (v2) — Diagrama de Casos de Uso
+
+left to right direction
+skinparam packageStyle rectangle
+skinparam usecase {
+  BackgroundColor #EEF4FD
+  BorderColor #1E4FA3
+  ArrowColor #1E4FA3
+  ActorBackgroundColor #FFF7ED
+  ActorBorderColor #D97706
+}
+skinparam rectangle {
+  BackgroundColor #F8FAFC
+  BorderColor #B9C7DE
+}
+
+actor "Visitante"      as V
+actor "Cliente"        as C
+actor "Vendedor"       as VD
+actor "Operador"       as OP
+actor "Administrador"  as A
+
+C  -|> V  : <<herda>>
+A  -|> OP : <<herda>>
+A  -|> VD : <<herda>>
+
+rectangle "Sistema — Loja Didática 2 (web2py + SQLite + React)" {
+
+  package "Acesso público (controller default / api)" {
+    usecase "Ver catálogo\n(React <Catalogo/>)"      as UC01
+    usecase "Buscar e filtrar\npor categoria"          as UC02
+    usecase "Ver detalhe do produto"                    as UC03
+    usecase "Criar conta de cliente"                    as UC04
+    usecase "Fazer login / logout"                      as UC05
+    usecase "Editar perfil"                             as UC06
+  }
+
+  package "Área do cliente (controller cliente / api)" {
+    usecase "Gerenciar carrinho\n(React <Carrinho/>)"   as UC10
+    usecase "Adicionar item"                            as UC11
+    usecase "Alterar quantidade /\nremover item"        as UC12
+    usecase "Finalizar compra\n(pedido + baixa de estoque\n+ PIX com QR Code)" as UC13
+    usecase "Informar pagamento\n(\"Já paguei\")"       as UC14
+    usecase "Acompanhar pedidos\ne entrega"             as UC15
+    usecase "Cancelar pedido\n(devolve estoque)"        as UC16
+    usecase "Abrir reclamação"                          as UC17
+    usecase "Enviar / cancelar\nmensagem à loja"        as UC18
+  }
+
+  package "Área do vendedor (controller vendedor / api)" {
+    usecase "Cadastrar produto"                         as UC20
+    usecase "Enviar imagem\n(validar, recortar 800×600,\nminiatura 400×300)" as UC21
+    usecase "Editar produto"                            as UC22
+    usecase "Excluir ou desativar\nproduto"             as UC23
+    usecase "Ajustar estoque\n(React <Estoque/>)"       as UC24
+    usecase "Ver movimentos\nde estoque"                as UC25
+    usecase "Ver vendas"                                as UC26
+  }
+
+  package "Área do operador (controller operador / api)" {
+    usecase "Aprovar PIX manualmente\n(React <PainelPix/>)" as UC30
+    usecase "Confirmar recebimento\n→ pedido pago"      as UC31
+    usecase "Recusar PIX\n→ pedido cancelado"           as UC32
+    usecase "Atualizar etapa\nda entrega"               as UC33
+    usecase "Cancelar pedido"                           as UC34
+    usecase "Responder reclamação"                      as UC35
+    usecase "Ler mensagens\ndos clientes"               as UC36
+  }
+
+  package "Administração (controller admin)" {
+    usecase "Gerenciar usuários\ne papéis"              as UC40
+    usecase "Bloquear usuário"                          as UC41
+    usecase "Gerenciar categorias"                      as UC42
+    usecase "Conferir estoque\n(produto × movimentos)"  as UC43
+    usecase "Ver visão geral\n(faturamento, pendências)" as UC44
+  }
+}
+
+V  --> UC01
+V  --> UC02
+V  --> UC03
+V  --> UC04
+V  --> UC05
+
+C  --> UC06
+C  --> UC10
+C  --> UC13
+C  --> UC14
+C  --> UC15
+C  --> UC16
+C  --> UC17
+C  --> UC18
+
+VD --> UC20
+VD --> UC22
+VD --> UC23
+VD --> UC24
+VD --> UC25
+VD --> UC26
+
+OP --> UC30
+OP --> UC33
+OP --> UC34
+OP --> UC35
+OP --> UC36
+
+A  --> UC40
+A  --> UC42
+A  --> UC43
+A  --> UC44
+
+UC02 .> UC01 : <<extend>>
+UC11 .> UC10 : <<include>>
+UC12 .> UC10 : <<include>>
+UC13 .> UC10 : <<extend>>
+UC14 .> UC13 : <<extend>>
+UC21 .> UC20 : <<include>>
+UC21 .> UC22 : <<extend>>
+UC31 .> UC30 : <<include>>
+UC32 .> UC30 : <<include>>
+UC41 .> UC40 : <<include>>
+
+note bottom of UC13
+  Transação única no SQLite:
+  cria pedido e itens, baixa o estoque
+  (UPDATE condicional) e gera o PIX.
+  Falha de estoque → rollback.
+end note
+
+note bottom of UC30
+  Fake PIX: nenhuma cobrança real.
+  O operador decide manualmente
+  na fila atualizada a cada 8 s.
+end note
+@enduml

@@ -1,0 +1,78 @@
+@startuml estados
+title Loja Didática 2 (v2) — Diagramas de Estados
+
+skinparam state {
+  BackgroundColor #EEF4FD
+  BorderColor #1E4FA3
+  ArrowColor #1E4FA3
+  StartColor #1E4FA3
+  EndColor   #0B2A5B
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #D97706
+}
+
+' ═══════════════════════════════════════════════════════════════
+'  1. PEDIDO (campo pedido.status)
+' ═══════════════════════════════════════════════════════════════
+state "Pedido" as PEDIDO {
+  [*] --> aguardando_pagamento : criar_pedido_do_carrinho()\nestoque baixado (saida)
+  aguardando_pagamento --> pago : operador confirma o PIX
+  pago --> separando : operador atualiza
+  separando --> enviado : operador atualiza
+  enviado --> em_entrega : operador atualiza
+  em_entrega --> entregue : operador atualiza
+  entregue --> [*]
+
+  aguardando_pagamento --> cancelado : cliente cancela\nou operador recusa o PIX
+  pago --> cancelado : cliente/operador cancela\n(aviso de estorno)
+  separando --> cancelado : cliente/operador cancela\n(aviso de estorno)
+  cancelado --> [*]
+}
+note right of PEDIDO
+  Todo cancelamento devolve os itens
+  ao estoque (movimento 'devolucao').
+  A partir de "enviado" o pedido não
+  pode mais ser cancelado
+  (STATUS_SEM_CANCELAMENTO).
+end note
+
+' ═══════════════════════════════════════════════════════════════
+'  2. PAGAMENTO PIX (campo pagamento_pix.status)
+' ═══════════════════════════════════════════════════════════════
+state "PagamentoPix" as PIX {
+  [*] --> gerado : criar_pix()\nBR Code + CRC16 + QR
+  gerado --> informado : cliente clica "Já paguei"
+  gerado --> confirmado : operador confirma
+  informado --> confirmado : operador confirma
+  gerado --> recusado : operador recusa\nou pedido cancelado
+  informado --> recusado : operador recusa\nou pedido cancelado
+  confirmado --> [*]
+  recusado --> [*]
+}
+note right of PIX
+  A tela do cliente consulta
+  api/pix_status a cada 5 s e
+  recarrega quando o status muda.
+end note
+
+' ═══════════════════════════════════════════════════════════════
+'  3. RECLAMAÇÃO e 4. PRODUTO
+' ═══════════════════════════════════════════════════════════════
+state "Reclamacao" as REC {
+  [*] --> aberta : cliente abre\n(uma por pedido)
+  aberta --> concluida : operador responde
+  aberta --> recusada : operador responde
+  concluida --> [*]
+  recusada --> [*]
+}
+
+state "Produto" as PROD {
+  [*] --> ativo : vendedor cadastra
+  ativo --> inativo : desativar\n(sai do catálogo e dos carrinhos)
+  inativo --> ativo : reativar na edição
+  ativo --> [*] : excluir\n(só sem vendas registradas)
+  inativo --> [*] : excluir\n(só sem vendas registradas)
+}
+@enduml

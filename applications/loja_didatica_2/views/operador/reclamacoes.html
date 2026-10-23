@@ -1,0 +1,21 @@
+{{extend 'layout.html'}}
+{{response.title = 'Reclamações'}}
+<div class="cabecalho-pagina"><div><h1>Reclamações</h1><p>Abertas primeiro. Responda alterando a situação e escrevendo ao cliente.</p></div></div>
+<div class="tabela-wrap">
+  <table class="tabela empilha">
+    <thead><tr><th>Pedido</th><th>Cliente</th><th>Reclamação</th><th>Situação</th><th>Aberta em</th><th></th></tr></thead>
+    <tbody>
+    {{if not linhas:}}<tr><td colspan="6" class="vazio">Nenhuma reclamação.</td></tr>{{pass}}
+    {{for l in linhas:}}
+      <tr>
+        <td data-rotulo="Pedido" class="mono"><a href="{{=URL('operador', 'pedido', args=[l.reclamacao.pedido])}}">{{=l.pedido.codigo}}</a></td>
+        <td data-rotulo="Cliente">{{=l.auth_user.first_name or '—'}}<br><span class="pequeno texto-3">{{=l.auth_user.email or ''}}</span></td>
+        <td data-rotulo="Reclamação">{{=l.reclamacao.texto[:90]}}{{if len(l.reclamacao.texto) > 90:}}…{{pass}}</td>
+        <td data-rotulo="Situação"><span class="etiqueta {{=l.reclamacao.status}}">{{=rotulo_reclamacao(l.reclamacao.status)}}</span></td>
+        <td data-rotulo="Aberta em">{{=data_br(l.reclamacao.criado_em)}}</td>
+        <td class="acoes-td"><a class="btn btn-secundario btn-p" href="{{=URL('operador', 'responder', args=[l.reclamacao.id])}}">Responder</a></td>
+      </tr>
+    {{pass}}
+    </tbody>
+  </table>
+</div>

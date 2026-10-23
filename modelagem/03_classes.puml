@@ -1,0 +1,239 @@
+@startuml classes
+title Loja Didática 2 (v2) — Diagrama de Classes (modelo de domínio e regras de negócio)
+
+skinparam class {
+  BackgroundColor #EEF4FD
+  BorderColor #1E4FA3
+  ArrowColor #1E4FA3
+  HeaderBackgroundColor #DBE7FA
+  FontColor #132038
+}
+skinparam stereotypeCBackgroundColor #FFF7ED
+skinparam stereotypeCBorderColor #D97706
+skinparam linetype ortho
+set namespaceSeparator none
+
+' ── Enumerações (constantes em models/db.py) ─────────────────────────────
+enum Papel {
+  cliente
+  vendedor
+  operador
+  administrador
+}
+enum StatusPedido {
+  aguardando_pagamento
+  pago
+  separando
+  enviado
+  em_entrega
+  entregue
+  cancelado
+}
+enum StatusPix {
+  gerado
+  informado
+  confirmado
+  recusado
+}
+enum TipoMovimento {
+  entrada
+  saida
+  devolucao
+  ajuste
+}
+enum StatusReclamacao {
+  aberta
+  concluida
+  recusada
+}
+
+' ── Entidades (tabelas da DAL) ───────────────────────────────────────────
+package "Autenticação (gluon.tools.Auth)" {
+  class Usuario <<auth_user>> {
+    +id : int
+    +first_name : str
+    +last_name : str
+    +email : str
+    +password : hash
+    +telefone : str
+    +registration_key : str  «"blocked" = bloqueado»
+  }
+  class Grupo <<auth_group>> {
+    +id : int
+    +role : Papel
+    +description : str
+  }
+  class Associacao <<auth_membership>> {
+    +user_id
+    +group_id
+  }
+}
+
+package "Catálogo" {
+  class Categoria {
+    +id : int
+    +nome : str
+    +descricao : str
+  }
+  class Produto {
+    +id : int
+    +codigo : str  «PRD-NNNNN»
+    +nome : str
+    +descricao : text
+    +preco : decimal(10,2)
+    +estoque : int
+    +prazo_dias : int
+    +imagem : str  «<codigo>.jpg»
+    +ativo : bool
+    +criado_em, atualizado_em : datetime
+  }
+  class MovimentoEstoque <<movimento_estoque>> {
+    +id : int
+    +tipo : TipoMovimento
+    +quantidade : int  «+entra / −sai»
+    +saldo_apos : int
+    +motivo : str
+    +criado_em : datetime
+  }
+}
+
+package "Compra" {
+  class ItemCarrinho <<carrinho_item>> {
+    +id : int
+    +quantidade : int
+    +criado_em : datetime
+  }
+  class Pedido {
+    +id : int
+    +codigo : str  «PED-XXXXXXXX»
+    +codigo_rastreio : str  «BR..BR»
+    +total : decimal(10,2)
+    +status : StatusPedido
+    +prazo_dias : int
+    +data_pedido, data_pagamento,
+     data_cancelamento : datetime
+    +observacao : text
+  }
+  class ItemPedido <<pedido_item>> {
+    +id : int
+    +codigo_produto, nome_produto : str  «snapshot»
+    +preco_unitario : decimal(10,2)
+    +quantidade : int
+    +subtotal : decimal(10,2)
+  }
+  class PagamentoPix <<pagamento_pix>> {
+    +id : int
+    +txid : str
+    +copia_cola : text  «BR Code EMV + CRC16»
+    +valor : decimal(10,2)
+    +status : StatusPix
+    +criado_em, informado_em, decidido_em : datetime
+    +observacao : str
+  }
+}
+
+package "Atendimento" {
+  class Reclamacao {
+    +id : int
+    +texto : text
+    +status : StatusReclamacao
+    +resposta : text
+    +criado_em, respondida_em : datetime
+  }
+  class Mensagem {
+    +id : int
+    +texto : text
+    +lida : bool
+    +cancelada : bool
+    +criado_em : datetime
+  }
+}
+
+' ── Regras de negócio (funções de models/regras.py agrupadas) ────────────
+package "Regras de negócio (models/regras.py)" <<Rectangle>> {
+  class ServicoEstoque <<service>> {
+    +registrar_movimento(produto_id, tipo, qtd, motivo, pedido_id) : int
+    +conferir_estoque() : list
+  }
+  class ServicoCarrinho <<service>> {
+    +itens_carrinho(usuario_id)
+    +resumo_carrinho(usuario_id) : dict
+    +adicionar_ao_carrinho(usuario_id, produto_id, qtd)
+    +atualizar_item_carrinho(usuario_id, item_id, qtd)
+    +remover_item_carrinho(usuario_id, item_id)
+    +limpar_carrinho(usuario_id)
+  }
+  class ServicoPedido <<service>> {
+    +criar_pedido_do_carrinho(usuario_id) : int
+    +cancelar_pedido(pedido, motivo, por_operador) : bool
+    +definir_status_entrega(pedido, status)
+    +pode_cancelar(pedido) : bool
+  }
+  class ServicoPix <<service>> {
+    +gerar_copia_cola(txid, valor) : str
+    +crc16_ccitt(texto) : str
+    +criar_pix(pedido)
+    +qrcode_base64(texto) : str
+    +cliente_informa_pagamento(pix)
+    +operador_decide_pix(pix, decisao, obs) : Pedido
+    +listar_pix_pendentes() : list
+  }
+  class ServicoImagem <<service>> {
+    +processar_imagem(bytes) : (jpeg, mini, info)
+    +salvar_imagem_produto(produto, bytes)
+    +remover_imagem_produto(produto)
+  }
+  class ErroDeNegocio <<exception>>
+}
+
+' ── Relacionamentos ──────────────────────────────────────────────────────
+Usuario "1" -- "0..*" Associacao
+Grupo   "1" -- "0..*" Associacao
+Grupo   ..> Papel
+
+Categoria "0..1" <-- "0..*" Produto
+Usuario   "0..1" <-- "0..*" Produto : vendedor
+Produto   "1" *-- "0..*" MovimentoEstoque
+Pedido    "0..1" <-- "0..*" MovimentoEstoque : origem
+Usuario   "0..1" <-- "0..*" MovimentoEstoque : quem
+
+Usuario "1" *-- "0..*" ItemCarrinho
+Produto "1" <-- "0..*" ItemCarrinho
+
+Usuario "0..1" <-- "0..*" Pedido : cliente
+Pedido  "1" *-- "1..*" ItemPedido
+Produto "0..1" <-- "0..*" ItemPedido
+Pedido  "1" -- "0..1" PagamentoPix
+Usuario "0..1" <-- "0..*" PagamentoPix : operador
+
+Pedido  "1" -- "0..1" Reclamacao
+Usuario "0..1" <-- "0..*" Reclamacao : cliente
+Usuario "1" *-- "0..*" Mensagem
+
+Produto ..> TipoMovimento
+Pedido  ..> StatusPedido
+PagamentoPix ..> StatusPix
+Reclamacao ..> StatusReclamacao
+
+ServicoCarrinho ..> ItemCarrinho
+ServicoPedido   ..> Pedido
+ServicoPedido   ..> ServicoEstoque : baixa / devolve
+ServicoPedido   ..> ServicoPix : cria PIX
+ServicoPix      ..> ServicoPedido : recusa cancela
+ServicoEstoque  ..> MovimentoEstoque
+ServicoImagem   ..> Produto
+ServicoEstoque  ..> ErroDeNegocio : lança
+ServicoCarrinho ..> ErroDeNegocio : lança
+
+note bottom of ServicoEstoque
+  Invariante: produto.estoque ==
+  soma(movimento_estoque.quantidade).
+  Saída usa UPDATE ... WHERE estoque >= qtd
+  (nunca fica negativo).
+end note
+note bottom of ServicoImagem
+  Grava em <RAIZ>/imagens/ (pasta do
+  loja_didatica_2_v2.py); as imagens são
+  servidas pela action default/imagem.
+end note
+@enduml

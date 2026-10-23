@@ -1,0 +1,56 @@
+{{extend 'layout.html'}}
+{{response.title = 'Sobre o projeto'}}
+<div class="cabecalho-pagina">
+  <div>
+    <h1>Sobre o projeto</h1>
+    <p>Uma loja de exemplo para estudar a arquitetura MVC do web2py, o banco SQLite e a integração com React.</p>
+  </div>
+</div>
+
+<div class="grade grade-2">
+  <div class="cartao">
+    <h2>Arquitetura MVC (web2py)</h2>
+    <dl class="definicoes">
+      <dt>Model</dt><dd><code>models/db.py</code> (DAL + Auth + tabelas), <code>models/regras.py</code> (regras de negócio), <code>models/z_dados_iniciais.py</code> (carga inicial)</dd>
+      <dt>View</dt><dd><code>views/layout.html</code> e uma pasta por controller; templates yatl com <code>&#123;&#123;=variavel&#125;&#125;</code></dd>
+      <dt>Controller</dt><dd><code>default</code> (público/login), <code>cliente</code>, <code>vendedor</code>, <code>operador</code>, <code>admin</code> e <code>api</code> (JSON)</dd>
+      <dt>Static</dt><dd><code>css/loja.css</code>, <code>js/loja.js</code>, <code>js/componentes/*.jsx</code> (React; versões pré-compiladas em <code>compilado/</code>), <code>js/vendor/</code></dd>
+      <dt>Dados</dt><dd><code>loja.sqlite</code> e <code>imagens/</code> na pasta do <code>loja_didatica_2_v2.py</code> (fora de <code>applications/</code>)</dd>
+    </dl>
+  </div>
+  <div class="cartao">
+    <h2>Papéis</h2>
+    <dl class="definicoes">
+      {{for papel in PAPEIS:}}<dt><span class="etiqueta {{=papel}}">{{=papel}}</span></dt><dd>{{=PAPEL_DESCRICAO[papel]}}</dd>{{pass}}
+    </dl>
+    <p class="pequeno texto-2 mt-1">Papéis são grupos do Auth do web2py (<code>auth_group</code> / <code>auth_membership</code>); um usuário pode ter vários.</p>
+  </div>
+  <div class="cartao">
+    <h2>Fluxo de uma compra</h2>
+    <ol class="lista-simples">
+      <li>Cliente monta o carrinho (React + <code>api/carrinho_*</code>); o carrinho fica na tabela <code>carrinho_item</code>.</li>
+      <li>Ao finalizar, <code>criar_pedido_do_carrinho()</code> cria pedido, itens e PIX e <strong>baixa o estoque</strong> em uma única transação.</li>
+      <li>A tela do PIX mostra QR Code e "copia e cola" (BR Code com CRC16 válido, chave fictícia).</li>
+      <li>O cliente clica em "Já paguei"; um <strong>operador confirma ou recusa</strong> manualmente.</li>
+      <li>Confirmado, o operador avança a entrega: separando → transportadora → em entrega → entregue.</li>
+      <li>Cancelamento (do cliente ou por PIX recusado) <strong>devolve os itens ao estoque</strong>.</li>
+    </ol>
+  </div>
+  <div class="cartao">
+    <h2>Consistência do estoque</h2>
+    <p>Toda alteração passa por <code>registrar_movimento()</code>, que grava um <code>movimento_estoque</code> (entrada, saída, devolução, ajuste). A saída usa um <code>UPDATE ... WHERE estoque &gt;= qtd</code>, que impede estoque negativo mesmo com dois clientes comprando ao mesmo tempo. O administrador confere <code>produto.estoque</code> contra a soma dos movimentos.</p>
+  </div>
+  <div class="cartao">
+    <h2>Upload de imagens</h2>
+    <p>O vendedor envia qualquer imagem (JPEG, PNG, GIF, WEBP, BMP, TIFF). O servidor valida com o Pillow, corrige a orientação EXIF, remove transparência, recorta ao centro para <strong>{{=IMAGEM_W}}×{{=IMAGEM_H}}</strong> e gera a miniatura <strong>{{=MINI_W}}×{{=MINI_H}}</strong>, ambas em JPEG, salvas em <code>imagens/&lt;codigo&gt;.jpg</code> (pasta ao lado do <code>loja_didatica_2_v2.py</code>) e servidas pela action <code>default/imagem</code>.</p>
+  </div>
+  <div class="cartao">
+    <h2>Segurança (versão didática)</h2>
+    <ul class="lista-simples">
+      <li>Senhas com hash do Auth (PBKDF2); sessão do web2py.</li>
+      <li>Token CSRF único para formulários (<code>_csrf</code>) e API (<code>X-CSRF-Token</code>).</li>
+      <li>Consultas via DAL (sem SQL montado à mão) e escape automático nas views.</li>
+      <li>PIX fictício: a chave <code>{{=CHAVE_PIX_FAKE}}</code> não existe. Nada é cobrado.</li>
+    </ul>
+  </div>
+</div>

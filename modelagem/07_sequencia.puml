@@ -1,0 +1,149 @@
+@startuml sequencia
+title Loja Didática 2 (v2) — Diagramas de Sequência
+
+skinparam sequence {
+  ArrowColor #1E4FA3
+  ActorBorderColor #D97706
+  ActorBackgroundColor #FFF7ED
+  ParticipantBackgroundColor #EEF4FD
+  ParticipantBorderColor #1E4FA3
+  LifeLineBorderColor #94A3B8
+  BoxBackgroundColor #F8FAFC
+  BoxBorderColor #E2E8F0
+  NoteBackgroundColor #FEF9C3
+  NoteBorderColor #CA8A04
+}
+skinparam roundcorner 8
+
+actor       "Cliente"                       as C
+participant "Navegador\n(React pré-compilado + loja.js)" as B
+participant "controllers/api.py"            as API
+participant "controllers/cliente.py"        as CTRL
+participant "models/regras.py"              as R
+database    "SQLite (DAL)"                  as DB
+participant "qrcode / Pillow"               as LIB
+actor       "Operador"                      as OP
+participant "Navegador do operador\n(<PainelPix/>)" as BO
+
+' ═══════════════════════════════════════════════════════════════
+== 1. Catálogo, carrinho e finalização da compra ==
+' ═══════════════════════════════════════════════════════════════
+C  -> B   : abre /default/index
+B  -> API : GET api/produtos?q=&categoria=
+API -> DB : select produto where ativo
+DB --> API: lista
+API --> B : JSON {produtos, categorias, pode_comprar}
+B  --> C  : <Catalogo/> renderiza os cards
+B  -> CTRL: GET /imagem/<codigo>_min.jpg (cada card)
+CTRL -> CTRL : default.imagem(): valida o nome,\nresponse.stream(imagens/<codigo>_min.jpg)
+CTRL --> B: 200 image/jpeg (Cache-Control)
+
+C  -> B   : escolhe quantidade e clica "Adicionar"
+B  -> API : POST api/carrinho_adicionar\n{produto_id, quantidade} + X-CSRF-Token
+API -> R  : adicionar_ao_carrinho(usuario, produto, qtd)
+R  -> DB  : select produto; select carrinho_item
+alt quantidade <= estoque e produto ativo
+  R  -> DB  : insert/update carrinho_item
+  R --> API : produto
+  API --> B : 200 {ok, mensagem, carrinho}
+  B --> C   : toast + badge do carrinho
+else estoque insuficiente
+  R --> API : ErroDeNegocio
+  API --> B : 400 {ok:false, erro}
+  B --> C   : toast de erro
+end
+
+C  -> B   : abre /cliente/carrinho e clica\n"Finalizar e pagar com PIX"
+B  -> API : POST api/carrinho_finalizar
+API -> R  : criar_pedido_do_carrinho(usuario)
+R  -> DB  : insert pedido (aguardando_pagamento)
+loop para cada item do carrinho
+  R -> R  : registrar_movimento(produto, 'saida', -qtd)
+  R -> DB : UPDATE produto SET estoque=estoque-qtd\nWHERE id=? AND estoque>=qtd
+  alt nenhuma linha alterada
+    R -> DB : rollback()
+    R --> API : ErroDeNegocio("Estoque insuficiente")
+    API --> B : 409 {erro}
+    B --> C : mensagem e carrinho recarregado
+  end
+  R -> DB : insert movimento_estoque(saldo_apos)
+  R -> DB : insert pedido_item (snapshot)
+end
+R  -> DB  : update pedido.total; delete carrinho_item
+R  -> R   : criar_pix(): txid, gerar_copia_cola()\n(BR Code EMV + crc16_ccitt)
+R  -> DB  : insert pagamento_pix (gerado); commit()
+R --> API : pedido_id
+API --> B : 200 {url_pix}
+B  -> CTRL: GET /cliente/pix/<id>
+CTRL -> R : pix_do_pedido(); qrcode_base64(copia_cola)
+R  -> LIB : qrcode.make()
+LIB --> R : PNG base64
+CTRL --> B: HTML com QR Code, copia-e-cola e "Já paguei"
+B --> C   : exibe pagamento
+
+' ═══════════════════════════════════════════════════════════════
+== 2. Aprovação manual do PIX pelo operador ==
+' ═══════════════════════════════════════════════════════════════
+C  -> B    : clica "Já paguei"
+B  -> CTRL : POST /cliente/informar_pagamento/<id> (_csrf)
+CTRL -> R  : cliente_informa_pagamento(pix)
+R  -> DB   : update pagamento_pix status=informado
+CTRL --> B : redirect tela do PIX
+loop a cada 5 s (loja.js)
+  B -> API : GET api/pix_status/<pedido_id>
+  API --> B: {status_pix, status_pedido}
+end
+
+OP -> BO   : abre /operador/pix
+loop a cada 8 s (<PainelPix/>)
+  BO -> API : GET api/pix_pendentes
+  API -> R  : listar_pix_pendentes()
+  R -> DB   : select pagamento_pix join pedido
+  API --> BO: JSON (informados em destaque)
+end
+OP -> BO   : "Confirmar recebimento" ou "Recusar"
+BO -> API  : POST api/pix_decidir {pix_id, decisao, observacao}
+API -> R   : operador_decide_pix(pix, decisao)
+alt confirmar
+  R -> DB  : update pagamento_pix status=confirmado
+  R -> DB  : update pedido status=pago, data_pagamento
+else recusar
+  R -> R   : cancelar_pedido(pedido, por_operador=True)
+  loop para cada pedido_item
+    R -> DB: registrar_movimento(produto, 'devolucao', +qtd)
+  end
+  R -> DB  : update pedido status=cancelado;\nupdate pagamento_pix status=recusado
+end
+R -> DB    : commit()
+API --> BO : 200 {mensagem, pendentes}
+BO --> OP  : toast e fila atualizada
+B -> API   : GET api/pix_status (polling)
+API --> B  : status mudou
+B --> C    : recarrega a tela: "Confirmado" ou "Recusado"
+
+' ═══════════════════════════════════════════════════════════════
+== 3. Cadastro de produto com upload e processamento da imagem ==
+' ═══════════════════════════════════════════════════════════════
+actor       "Vendedor"                 as V
+participant "controllers/vendedor.py"  as CV
+
+V  -> B   : preenche o formulário e arrasta a imagem\n(loja.js mostra pré-visualização)
+B  -> CV  : POST /vendedor/novo (multipart/form-data)
+CV -> CV  : exigir_post_seguro(); _ler_formulario_produto()
+CV -> DB  : insert produto (codigo gerado, estoque=0)
+CV -> R   : registrar_movimento(pid, 'entrada', estoque_inicial)
+R  -> DB  : update produto; insert movimento_estoque
+CV -> R   : salvar_imagem_produto(produto, bytes)
+R  -> R   : processar_imagem(): valida formato/tamanho,\nexif_transpose, RGB (alpha→branco)
+R  -> LIB : ImageOps.fit 800×600 e 400×300; JPEG q85
+LIB --> R : jpeg_principal, jpeg_miniatura
+R  -> R   : grava imagens/<codigo>.jpg e _min.jpg\n(pasta ao lado do loja_didatica_2_v2.py)
+R  -> DB  : update produto.imagem
+alt imagem inválida
+  R --> CV : ErroDeNegocio (formato, tamanho, corrompida)
+  CV --> B : redirect editar + aviso "imagem rejeitada"
+else ok
+  CV --> B : redirect /vendedor/index + aviso "cadastrado"
+end
+B --> V   : lista de produtos com a miniatura
+@enduml

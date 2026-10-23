@@ -1,0 +1,87 @@
+@startuml implantacao
+title Loja Didática 2 (v2) — Diagrama de Implantação
+
+skinparam node {
+  BackgroundColor #EEF4FD
+  BorderColor #1E4FA3
+  FontColor #132038
+}
+skinparam database {
+  BackgroundColor #F0FDF4
+  BorderColor #16A34A
+}
+skinparam artifact {
+  BackgroundColor #FFFFFF
+  BorderColor #94A3B8
+}
+skinparam folder {
+  BackgroundColor #F8FAFC
+  BorderColor #94A3B8
+}
+skinparam note {
+  BackgroundColor #FFF7ED
+  BorderColor #D97706
+}
+
+node "Computador do aluno (ou servidor de laboratório)" as PC {
+
+  node "Navegador\n(Chrome, Firefox, Edge — desktop ou celular)" as BROWSER {
+    artifact "HTML/CSS renderizado"
+    artifact "React (cópia local) executa os\ncomponentes pré-compilados"
+  }
+
+  node "Python 3.9+" as PY {
+    folder "Pasta do projeto (onde está o .py)" as PASTA {
+      artifact "loja_didatica_2_v2.py\n(arquivo único: na 1ª execução verifica e\najusta o ambiente aqui e inicia o servidor)" as LAUNCHER
+      folder "venv/  (Pillow + qrcode, criado\nse as bibliotecas faltarem)" as VENV
+      database "loja.sqlite" as DBF
+      folder "imagens/  (produtos: exemplo + uploads)" as IMGS
+      artifact "routes.py  parameters_8000.py\nhttpserver.log" as CONF
+      folder "applications/loja_didatica_2/" as APP {
+        folder "models/  controllers/  views/" as MVC
+        folder "static/css  static/js (React, componentes)" as STATIC
+        folder "sessions/  errors/  cache/  uploads/" as RUNTIME
+      }
+    }
+    node "web2py (framework)\n./web2py (baixado automaticamente),\n../web2py, ~/web2py ou --web2py DIR" as W2P {
+      artifact "web2py.py + gluon/\n(servidor Rocket em :8000)" as GLUON
+    }
+  }
+}
+
+cloud "Internet (só na 1ª execução)" {
+  node "pypi.org" as PYPI {
+    artifact "pillow, qrcode (pip)"
+  }
+  node "github.com" as GH {
+    artifact "web2py + pydal + yatl + rocket3\n(git clone --recursive ou zips)"
+  }
+  node "unpkg.com (CDN)" as CDN {
+    artifact "@babel/standalone\n(só se um .jsx for editado)"
+  }
+}
+
+BROWSER --> GLUON : HTTP/1.1\nhttp://localhost:8000/
+LAUNCHER ..> VENV  : 1. cria e instala (pip)\ne se reexecuta nele
+LAUNCHER ..> PYPI  : pip install pillow qrcode
+LAUNCHER ..> APP   : 2. extrai models/controllers/views/static
+LAUNCHER ..> IMGS  : 3. grava as imagens de exemplo
+LAUNCHER ..> CONF  : 4. grava routes.py
+LAUNCHER ..> GH    : 5. baixa o web2py se não houver
+LAUNCHER --> GLUON : 6. importa o gluon e inicia o servidor\n(applications_parent = pasta do projeto)
+LAUNCHER ..> DBF   : 7. primeira requisição cria e povoa o banco
+GLUON --> MVC      : executa
+GLUON --> STATIC   : serve
+GLUON --> RUNTIME  : grava
+MVC --> DBF        : pyDAL / sqlite3 (InDBMigrator)
+MVC --> IMGS       : grava uploads / serve via default/imagem
+MVC --> VENV       : Pillow (uploads) e qrcode (QR Code)
+BROWSER ..> CDN    : apenas ao editar componentes .jsx
+
+note bottom of PC
+  Tudo roda em uma só máquina para a aula e tudo o que a loja
+  grava fica na pasta do .py (banco, imagens, sessões).
+  Para acesso pela rede do laboratório: --rede
+  e o IP da máquina no navegador (ex.: http://10.0.0.5:8000/).
+end note
+@enduml
