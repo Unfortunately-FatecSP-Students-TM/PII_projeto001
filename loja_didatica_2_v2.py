@@ -985,30 +985,159 @@ USUARIOS_DEMO = [
 
 # (código, nome, categoria, preço, estoque inicial, prazo em dias úteis, descrição)
 PRODUTOS_DEMO = [
-    ('PRD-10001', 'Camiseta Básica', 'Vestuário', 49.90, 40, 5,
-     'Camiseta 100% algodão, malha penteada, disponível em várias cores.'),
-    ('PRD-10002', 'Moletom com Capuz', 'Vestuário', 159.90, 15, 7,
-     'Moletom flanelado com capuz e bolso canguru. Tamanhos P ao GG.'),
-    ('PRD-10003', 'Boné Bordado', 'Vestuário', 59.90, 25, 5,
-     'Boné aba curva com ajuste traseiro e bordado frontal.'),
-    ('PRD-10004', 'Caneca Térmica 500 ml', 'Acessórios', 89.90, 30, 7,
-     'Caneca de aço inox com tampa hermética; mantém a temperatura por 12 horas.'),
-    ('PRD-10005', 'Garrafa Squeeze 750 ml', 'Acessórios', 39.90, 50, 5,
-     'Garrafa livre de BPA com bico retrátil, ideal para academia.'),
-    ('PRD-10006', 'Mochila para Notebook', 'Acessórios', 199.90, 12, 10,
-     'Mochila impermeável com compartimento acolchoado para notebook de até 15,6".'),
-    ('PRD-10007', 'Mouse Sem Fio', 'Informática', 79.90, 35, 5,
-     'Mouse óptico 2.4 GHz com 6 botões e receptor USB nano.'),
-    ('PRD-10008', 'Teclado Mecânico Compacto', 'Informática', 349.90, 8, 10,
-     'Teclado 65% com switches vermelhos, keycaps PBT e iluminação branca.'),
-    ('PRD-10009', 'Headset com Microfone', 'Informática', 229.90, 10, 7,
-     'Headset over-ear com microfone removível e cabo de 2 m.'),
-    ('PRD-10010', 'Hub USB-C 7 em 1', 'Informática', 189.90, 20, 7,
+    ('PRD-10001', 'Resident Evil', 'Jogos', 3000.00, 40, 12,
+    'Jogo para PlayStation 1, Mídia Física, Original\n'
+    'Acompanha o manual\n'
+    'Estado: muito bom\n'),
+    ('PRD-10002', 'Crash Bandicoot', 'Jogos', 720.00, 0, 6,
+    'Jogo para PlayStation 1, Mídia Física, Original\n'
+    'Estado: bom\n'),
+    ('PRD-10003', 'GTA San Andreas', 'Jogos', 210.00, 2, 5,
+    'Jogo para PlayStation 2, Mídia Física, Original\n'
+    'Estado: usado\n'),
+    ('PRD-10004', 'Resident Evil 4', 'Jogos', 680.00, 1, 5,
+     'Jogo para PlayStation 2, Mídia Física, Original\n'
+      'Estado: muito bom\n'),
+    ('PRD-10005', 'Spider-Man: Shattered Dimensions', 'Jogos', 1200.00, 1, 7,
+     'Jogo para PlayStation 3, Mídia Física, Original\n'
+    'Estado: quase novo\n'),
+    ('PRD-10006', 'Grand Theft Auto V', 'Jogos', 80, 4, 2,
+     'Jogo para PlayStation 3, Mídia Física, Original\n'
+    'Acompanha mapa e guia do jogo\n'
+    'Estado: aceitável\n'),
+    ('PRD-10007', 'Ben 10: Protector of Earth', 'Jogos', 1010.10, 10, 10,
+     'Jogo para PSP, Mídia Física, Original\n'
+     'Estado: muito bom\n'),
+    ('PRD-10008', 'God of War: Chains of Olympus', 'Jogos', 440.00, 2, 13,
+     'Jogo para PSP, Mídia Física, Original\n'
+     'Acompanha manual\n'
+    'Estado: bom\n'),
+    ('PRD-10009', 'Persona 4 Golden', 'Jogos', 270.00, 1, 9,
+     'Jogo para PS Vita, Mídia Física, Original\n'
+     'Estado: muito bom\n'),
+    ('PRD-10010', 'Rayman Origins', 'Jogos', 90.00, 3, 9,
      'Hub com HDMI 4K, 3 portas USB 3.0, leitor SD/microSD e USB-C PD 100 W.'),
-    ('PRD-10011', 'Caderno Pautado 200 folhas', 'Papelaria', 34.90, 60, 5,
-     'Caderno universitário capa dura, 10 matérias, papel 70 g/m².'),
-    ('PRD-10012', 'Kit de Canetas Coloridas', 'Papelaria', 24.90, 0, 5,
-     'Estojo com 12 canetas ponta fina 0,4 mm em cores sortidas.'),
+    ('PRD-10011', 'Super Mario Bros.', 'Jogos', 40000.00, 1, 20,
+    'Jogo para NES, Mídia Física, Original\n'
+    'Estado: novo\n'),
+    ('PRD-10012', 'Castlevania', 'Jogos', 520.00, 1, 17,
+     'Jogo para NES, Mídia Física, Original\n'
+    'Acompanha caixa original e manual\n'
+    'Estado: bom\n'),
+    ('PRD-10013', 'Super Mario World', 'Jogos', 150.00, 4, 11,
+    'Jogo para Super Nintendo, Mídia Física, Original\n'
+    'Apenas cartucho, não acompanha caixa\n'
+    'Acompanha manual\n'
+    'Estado: razoável\n'),
+    ('PRD-10014', 'Donkey Kong Country', 'Jogos', 16200.00, 1, 25,
+    'Jogo para Super Nintendo, Mídia Física, Original\n'
+      'Acompanha cartucho e caixa originais\n'
+      'Estado: novo\n'),
+    ('PRD-10015', 'Tetris', 'Jogos', 200.00, 7, 6,
+    'Jogo para Game Boy, Mídia Física, Original\n'
+      'Não acompanha caixa, apenas o cartucho\n'
+      'Estado: muito bom\n'),
+    ('PRD-10016', 'Pokémon Red', 'Jogos', 2500.00, 1, 18,
+      'Jogo para Game Boy, Mídia Física, Original\n'
+      'Acompanha caixa, cartucho, berço, encartes e manual originais\n'
+      'Estado: bom\n'),
+    ('PRD-10017', 'Pokémon Gold', 'Jogos', 1700, 1, 11,
+      'Jogo para Game Boy Color, Mídia Física, Original\n'
+      'Acompanha caixa e cartucho originais\n'
+      'Estado: muito bom\n'),
+    ('PRD-10018', 'Legend Of Zelda - Link’s Awakening DX', 'Jogos', 1000, 0, 22,
+    'Acompanha caixa, cartucho e manuais originais\n'
+    'Estado: bom\n'),
+    ('PRD-10019', 'Metroid: Zero Mission', 'Jogos', 800.00, 1, 27,
+      'Jogo para Game Boy Advance, Mídia Física, Original, Versão japonesa\n'
+      'Acompanha caixa, manual, livretos, DVD/VHS e cartucho originais\n'
+      'Estado: muito bom\n'),
+    ('PRD-10020', 'Mother 1+2', 'Jogos', 610.00, 2, 12,
+      'Jogo para Game Boy Advance, Mídia Física, Original\n'
+      'Acompanha caixa, manual e cartucho originais\n'
+      'Estado: muito bom\n'),
+    ('PRD-10021', 'Lego Batman The Videogame', 'Jogos', 505.00, 1, 2,
+      'Jogo para Nintendo DS, Mídia Física, Original\n'
+      'Acompanha manual\n'
+      'Estado: como novo\n'),
+    ('PRD-10022', 'Rhythm Heaven', 'Jogos', 270.00, 1, 8,
+      'Jogo para Nintendo DS, Mídia Física, Original\n'
+      'Não acompanha manual\n'
+      'Estado: aceitável\n'),
+    ('PRD-10023', 'Animal Crossing: New Leaf', 'Jogos', 279.99, 9, 21,
+    'Jogo para Nintendo 3DS, Mídia Física, Original\n'
+    'Estado: Muito Bom\n'),
+    ('PRD-10024', 'Super Mario 3D Land', 'Jogos', 219.99, 10, 7,
+      'Jogo para Nintendo 3DS, Mídia Física, Original\n'
+      'Estado: Aceitável\n'),
+    ('PRD-10025', 'Super Mario 64', 'Jogos', 1100.99, 1, 30,
+    'Jogo para Nintendo 64, Mídia Física, Original\n'
+    'Estado: Semi Novo\n'),
+    ('PRD-10026', 'The Legend of Zelda: Ocarina of Time - Edição Colecionador', 'Jogos', 3049.99, 1, 30,
+    'Jogo para Nintendo 64, Mídia Física, Original\n'
+    'Estado: Semi Novo\n'),
+    ('PRD-10027', 'Metroid Prime', 'Jogos', 279.99, 2, 10,
+    'Jogo para Gamecube, Mídia Física, Original'\n
+    'Estado: Muito Bom\n'),
+    ('PRD-10028', 'Super Mario Sunshine', 'Jogos', 259.31, 4, 13,
+      'Jogo para PlayStation 2, Mídia Física, Original\n'
+      'Estado: muito bom\n'),
+    ('PRD-10029', 'Punch Out', 'Jogos', 270.95, 3, 29,
+      'Jogo para Wii, Mídia Física, Original\n'
+      'Estado: Novo\n'),
+    ('PRD-10030', 'Scooby Doo And The Spooky Swamp', 'Jogos', 1000.99, 1, 9,
+      'Jogo para Wii, Mídia Física, Original\n'
+      'Estado: Aceitável\n'),
+    ('PRD-10031', 'Mario Kart 8', 'Jogos', 179.45, 4, 20,
+      'Jogo para Wii U, Mídia Física, Original\n'
+      'Estado: Novo\n'),
+    ('PRD-10032', 'Splatoon', 'Jogos', 150.77, 1, 13,
+      'Jogo para Wii U, Mídia Física, Original\n'
+      'Estado: Aceitável\n'),
+    ('PRD-10033', 'Alex Kidd in Miracle World', 'Jogos', 240.80, 3, 5,
+      'Jogo para Master System, Mídia Física, Original\n'
+      'Estado: Muito Bom\n'),
+    ('PRD-10034', 'Castle of Illusion Starring Mickey Mouse', 'Jogos', 199.99, 1, 18,
+      'Jogo para Master System, Mídia Física, Original\n'
+      'Estado: Bom\n'),
+    ('PRD-10035', 'Sonic the Hedgehog.', 'Jogos', 780.00, 1, 30,
+    'Jogo para Sega Genesis, Mídia Física, Original\n'
+    'Estado: Aceitável\n'),
+    ('PRD-10036', 'Streets of Rage 2', 'Jogos', 695.00, 2, 11,
+      'Jogo para Sega Genesis, Mídia Física, Original\n'
+      'Estado: Muito Bom\n'),
+    ('PRD-10037', 'Crazy Taxi', 'Jogos', 595.00, 1, 29,
+    'Jogo para Dreamcast, Mídia Física, Original\n'
+    'Estado: Aceitável\n'),
+    ('PRD-10038', 'Shenmue', 'Jogos', 490.99, 2, 20,
+    'Jogo para Dreamcast, Mídia Física, Original\n'
+    'Estado: Aceitável\n'),
+    ('PRD-10039', 'Fable', 'Jogos', 200.00, 2, 20,
+      'Jogo para XBOX, Mídia Física, Original\n'
+      'Estado: Aceitável\n'),
+    ('PRD-10040', 'Legacy of Kain: Defiance', 'Jogos', 230.00, 1, 20,
+      'Jogo para XBOX, Mídia Física, Original\n'
+      'Estado: Muito Bom\n'),
+    ('PRD-10041', 'Gears of War', 'Jogos', 200, 5, 11,
+      'Jogo para XBOX, Mídia Física, Original\n'
+      'Estado: Muito bom\n'),
+    ('PRD-10042', 'Halo 3', 'Jogos', 185.00, 4, 3,
+    'Jogo para XBOX, Mídia Física, Original\n'
+    'Estado: Bom\n'),
+    ('PRD-10043', 'Grand Theft Auto IV', 'Jogos', 280.00, 1, 14,
+      'Jogo para XBOX 360, Mídia Física, Original\n' 
+      'Estado: Novo\n'),
+    ('PRD-10044', 'Grand Theft Auto V', 'Jogos', 280.00, 15, 15,
+      'Jogo para XBOX 360, Mídia Física, Original\n'
+      'Estado: Semi Novo\n'),
+    ('PRD-10045', 'E.T. the Extra-Terrestrial', 'Jogos', 1500.00, 2, 12,
+      'Jogo para Atari 2600, Mídia Física, Original, Lacrado\n'
+      'Acompanha caixa e cartucho originais\n'
+      'Estado: muito bom\n'),
+    ('PRD-10046', 'Pac-Man', 'Jogos', 450.00, 1, 24,
+      'Jogo para Atari 2600, Mídia Física, Original\n'
+      'Acompanha caixa, cartucho e manual originais\n'
+      'Estado: razoável\n'),
 ]
 
 
@@ -1029,10 +1158,10 @@ def carga_inicial():
     auth.add_membership(grupos['vendedor'], usuarios['administrador'])
 
     categorias = {}
-    for nome, desc in [('Vestuário', 'Camisetas, moletons e bonés'),
-                       ('Acessórios', 'Canecas, garrafas e mochilas'),
-                       ('Informática', 'Periféricos e acessórios para computador'),
-                       ('Papelaria', 'Cadernos e materiais de escrita')]:
+    for nome, desc in [('Consoles', 'Videogames clássicos e retrô de diferentes gerações e fabricantes.'),
+                       ('Acessórios', 'Cabos, adaptadores, fontes e acessórios para consoles antigos.'),
+                       ('Jogos', 'Jogos físicos clássicos, incluindo cartuchos e mídias em disco.'),
+                       ('Controles', 'Controles originais e compatíveis para videogames clássicos e retrô.')]:
         categorias[nome] = db.categoria.insert(nome=nome, descricao=desc)
 
     for codigo, nome, cat, preco, estoque, prazo, desc in PRODUTOS_DEMO:
@@ -1554,20 +1683,35 @@ def index():
     categorias = db(db.categoria).select(orderby=db.categoria.nome)
     return dict(categorias=categorias, busca=request.vars.q or '')
 
-
 def produto():
-    """Detalhe de um produto (view clássica renderizada no servidor)."""
+    """Detalhe de um produto com galeria de imagens."""
     p = db.produto(request.args(0, cast=int)) if request.args else None
     if not p or (not p.ativo and not tem_papel('vendedor', 'operador', 'administrador')):
         avisar('erro', 'Produto não encontrado.')
         redirect(URL('index'))
-    return dict(p=p, no_carrinho=quantidade_carrinho(auth.user_id))
 
+    # Lista de imagens do produto
+    galeria = []
+
+    # Imagem principal cadastrada no banco
+    if p.imagem and os.path.isfile(caminho_imagem(p.imagem)):
+        galeria.append(p.imagem)
+
+    # Imagens adicionais: PRD-10001_2.jpg, PRD-10001_3.jpg etc.
+    numero = 2
+    while numero <= 20:
+        nome_imagem = '{}_{}.jpg'.format(p.codigo, numero)
+        if os.path.isfile(caminho_imagem(nome_imagem)):
+            galeria.append(nome_imagem)
+        numero += 1
+    return dict(
+        p=p,
+        galeria=galeria,
+        no_carrinho=quantidade_carrinho(auth.user_id))    
 
 def sobre():
     """Página que explica a arquitetura do projeto (material de aula)."""
     return dict()
-
 
 def imagem():
     """Serve as imagens dos produtos, que ficam em <RAIZ>/imagens/ (ao lado do .py),
@@ -2544,42 +2688,219 @@ ARQUIVOS['views/default/perfil.html'] = r'''{{extend 'layout.html'}}
 # ---- views/default/produto.html --------------------------------------------
 ARQUIVOS['views/default/produto.html'] = r'''{{extend 'layout.html'}}
 {{response.title = p.nome}}
-<p class="pequeno"><a href="{{=URL('default', 'index')}}">Catálogo</a> › {{=p.categoria.nome if p.categoria else 'Sem categoria'}}</p>
+
+<p class="pequeno">
+  <a href="{{=URL('default', 'index')}}">Catálogo</a>
+  › {{=p.categoria.nome if p.categoria else 'Sem categoria'}}
+</p>
+
 <div class="detalhe">
-  <div class="foto-grande"><img src="{{=url_imagem(p, mini=False)}}" alt="{{=p.nome}}"></div>
-  <div class="cartao">
-    <h1>{{=p.nome}}</h1>
-    <p class="texto-3 mono pequeno">{{=p.codigo}}{{if not p.ativo:}} · <span class="etiqueta inativo">fora do catálogo</span>{{pass}}</p>
-    <p class="preco" style="font-size:1.8rem">{{=moeda(p.preco)}}</p>
-    <p>{{=p.descricao or 'Sem descrição.'}}</p>
-    <dl class="definicoes">
-      <dt>Entrega</dt><dd>em até {{=p.prazo_dias}} dias úteis</dd>
-      <dt>Estoque</dt>
-      <dd>{{if p.estoque == 0:}}<span class="estoque-info zerado">Esgotado</span>
-          {{elif p.estoque <= 5:}}<span class="estoque-info baixo">Só {{=p.estoque}} unidade(s)</span>
-          {{else:}}{{=p.estoque}} unidades{{pass}}</dd>
-      <dt>Vendido por</dt><dd>{{=nome_usuario(p.vendedor) if p.vendedor else NOME_LOJA}}</dd>
-    </dl>
-    <div class="mt-1">
-    {{if tem_papel('cliente'):}}
-      {{if p.estoque > 0 and p.ativo:}}
-      <form method="post" action="{{=URL('cliente', 'adicionar', args=[p.id])}}" class="acoes" id="form-adicionar">
-        <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
-        <label for="qtd" class="pequeno">Quantidade</label>
-        <input id="qtd" type="number" name="quantidade" value="1" min="1" max="{{=p.estoque}}" style="width:6rem">
-        <button class="btn btn-primario" type="submit">Adicionar ao carrinho</button>
-      </form>
-      {{else:}}
-      <button class="btn btn-primario" disabled>Esgotado</button>
+
+  <!-- GALERIA DE IMAGENS -->
+  <div class="galeria-produto">
+
+    <div class="foto-grande">
+      <img
+        id="imagem-principal"
+        src="{{=URL('default', 'imagem', args=[galeria[0]]) if galeria else url_imagem(p, mini=False)}}"
+        alt="{{=p.nome}}"
+      >
+    </div>
+
+    {{if len(galeria) > 1:}}
+    <div class="galeria-miniaturas">
+
+      {{for indice, imagem in enumerate(galeria):}}
+      <button
+        type="button"
+        class="miniatura-galeria{{=' selecionada' if indice == 0 else ''}}"
+        data-imagem="{{=URL('default', 'imagem', args=[imagem])}}"
+        aria-label="Visualizar imagem {{=indice + 1}} de {{=p.nome}}"
+        aria-pressed="{{='true' if indice == 0 else 'false'}}"
+      >
+        <img
+          src="{{=URL('default', 'imagem', args=[imagem])}}"
+          alt="Miniatura {{=indice + 1}}"
+          loading="lazy"
+        >
+      </button>
       {{pass}}
-    {{elif not auth.user:}}
-      <a class="btn btn-secundario" href="{{=URL('default', 'login')}}">Entre para comprar</a>
+
+    </div>
     {{pass}}
+
+  </div>
+
+  <!-- INFORMAÇÕES DO PRODUTO -->
+  <div class="cartao">
+
+    <h1>{{=p.nome}}</h1>
+
+    <p class="texto-3 mono pequeno">
+      {{=p.codigo}}
+      {{if not p.ativo:}}
+        · <span class="etiqueta inativo">fora do catálogo</span>
+      {{pass}}
+    </p>
+
+    <p class="preco" style="font-size:1.8rem">
+      {{=moeda(p.preco)}}
+    </p>
+
+    <p class="descricao-produto">{{=p.descricao or 'Sem descrição.'}}</p>
+
+    <dl class="definicoes">
+      <dt>Entrega</dt>
+      <dd>em até {{=p.prazo_dias}} dias úteis</dd>
+
+      <dt>Estoque</dt>
+      <dd>
+        {{if p.estoque == 0:}}
+          <span class="estoque-info zerado">Esgotado</span>
+        {{elif p.estoque <= 5:}}
+          <span class="estoque-info baixo">
+            Só {{=p.estoque}} unidade(s)
+          </span>
+        {{else:}}
+          {{=p.estoque}} unidades
+        {{pass}}
+      </dd>
+
+      <dt>Vendido por</dt>
+      <dd>
+        {{=nome_usuario(p.vendedor) if p.vendedor else NOME_LOJA}}
+      </dd>
+    </dl>
+
+    <div class="mt-1">
+
+      {{if tem_papel('cliente'):}}
+
+        {{if p.estoque > 0 and p.ativo:}}
+        <form
+          method="post"
+          action="{{=URL('cliente', 'adicionar', args=[p.id])}}"
+          class="acoes"
+          id="form-adicionar"
+        >
+          <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+
+          <label for="qtd" class="pequeno">Quantidade</label>
+
+          <input
+            id="qtd"
+            type="number"
+            name="quantidade"
+            value="1"
+            min="1"
+            max="{{=p.estoque}}"
+            style="width:6rem"
+          >
+
+          <button class="btn btn-primario" type="submit">
+            Adicionar ao carrinho
+          </button>
+        </form>
+
+        {{else:}}
+          <button class="btn btn-primario" disabled>
+            Esgotado
+          </button>
+        {{pass}}
+
+      {{elif not auth.user:}}
+        <a
+          class="btn btn-secundario"
+          href="{{=URL('default', 'login')}}"
+        >
+          Entre para comprar
+        </a>
+      {{pass}}
+
     </div>
   </div>
 </div>
-'''
 
+<!-- ESTILOS DA GALERIA -->
+<style>
+.galeria-produto {
+  min-width: 0;
+}
+.descricao-produto {
+    white-space: pre-line;
+    line-height: 1.8;
+}
+.galeria-produto .foto-grande img {
+  width: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.galeria-miniaturas {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.miniatura-galeria {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 4px;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.2s, opacity 0.2s;
+}
+
+.miniatura-galeria img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+  border-radius: 5px;
+}
+
+.miniatura-galeria:hover {
+  opacity: 0.75;
+}
+
+.miniatura-galeria.selecionada {
+  border-color: #7952b3;
+}
+
+.miniatura-galeria:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+</style>
+
+<!-- INTERAÇÃO DA GALERIA -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const imagemPrincipal = document.getElementById('imagem-principal');
+  const miniaturas = document.querySelectorAll('.miniatura-galeria');
+
+  if (!imagemPrincipal) return;
+
+  miniaturas.forEach(function (miniatura) {
+    miniatura.addEventListener('click', function () {
+
+      imagemPrincipal.src = this.dataset.imagem;
+
+      miniaturas.forEach(function (item) {
+        item.classList.remove('selecionada');
+        item.setAttribute('aria-pressed', 'false');
+      });
+
+      this.classList.add('selecionada');
+      this.setAttribute('aria-pressed', 'true');
+
+    });
+  });
+});
+</script>
+'''
 # ---- views/default/registrar.html ------------------------------------------
 ARQUIVOS['views/default/registrar.html'] = r'''{{extend 'layout.html'}}
 {{response.title = 'Criar conta'}}
