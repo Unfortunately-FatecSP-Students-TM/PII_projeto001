@@ -1016,7 +1016,8 @@ PRODUTOS_DEMO = [
      'Jogo para PS Vita, Mídia Física, Original\n'
      'Estado: muito bom\n'),
     ('PRD-10010', 'Rayman Origins', 'Jogos', 90.00, 3, 9,
-     'Hub com HDMI 4K, 3 portas USB 3.0, leitor SD/microSD e USB-C PD 100 W.'),
+     'Jogo para PS Vita, Mídia Física, Original\n'
+      'Estado: aceitável\n'),
     ('PRD-10011', 'Super Mario Bros.', 'Jogos', 40000.00, 1, 20,
     'Jogo para NES, Mídia Física, Original\n'
     'Estado: novo\n'),
@@ -1077,11 +1078,11 @@ PRODUTOS_DEMO = [
     'Jogo para Nintendo 64, Mídia Física, Original\n'
     'Estado: Semi Novo\n'),
     ('PRD-10027', 'Metroid Prime', 'Jogos', 279.99, 2, 10,
-    'Jogo para Gamecube, Mídia Física, Original'\n
+    'Jogo para Gamecube, Mídia Física, Original\n'
     'Estado: Muito Bom\n'),
     ('PRD-10028', 'Super Mario Sunshine', 'Jogos', 259.31, 4, 13,
-      'Jogo para PlayStation 2, Mídia Física, Original\n'
-      'Estado: muito bom\n'),
+      'Jogo para Gamecube, Mídia Física, Original\n'
+     ' Estado: Aceitável\n'),
     ('PRD-10029', 'Punch Out', 'Jogos', 270.95, 3, 29,
       'Jogo para Wii, Mídia Física, Original\n'
       'Estado: Novo\n'),
