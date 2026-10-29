@@ -1,0 +1,48 @@
+build: false
+image: Visual Studio 2022
+before_build:
+  - choco install redis-64
+  - redis-server --service-install
+  - redis-server --service-start
+
+environment:
+  matrix:
+    - PYTHON: "C:/Python39-x64"
+      COVERAGE_PROCESS_START: gluon/tests/coverage.ini
+      PYTHON_ARCH: "64"
+      W2P_SKIP_SCHEDULER_TESTS: "1"
+
+    - PYTHON: "C:/Python311-x64"
+      COVERAGE_PROCESS_START: gluon/tests/coverage.ini
+      PYTHON_ARCH: "64"
+      W2P_SKIP_SCHEDULER_TESTS: "1"
+
+    - PYTHON: "C:/Python312-x64"
+      COVERAGE_PROCESS_START: gluon/tests/coverage.ini
+      PYTHON_ARCH: "64"
+      W2P_SKIP_SCHEDULER_TESTS: "1"
+
+    - PYTHON: "C:/Python314-x64"
+      COVERAGE_PROCESS_START: gluon/tests/coverage.ini
+      PYTHON_ARCH: "64"
+
+clone_depth: 50
+
+init:
+  - "ECHO %PYTHON%"
+  - set PATH=%PYTHON%;%PYTHON%\Scripts;%PATH%
+
+install:
+  - python -m ensurepip
+  - pip install codecov redis
+  - git submodule update --init --recursive
+  # Check that we have the expected version and architecture for Python
+  - "python --version"
+  - "python -c \"import struct; print(struct.calcsize('P') * 8)\""
+
+test_script:
+  - python web2py.py --run_system_tests --with_coverage
+
+after_test:
+  - coverage combine
+  - codecov
