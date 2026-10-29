@@ -1,0 +1,16 @@
+{{extend 'layout.html'}}
+{{response.title = 'Cancelar pedido'}}
+<div class="cartao cartao-estreito" style="margin:0 auto">
+  <h1>Cancelar o pedido {{=pedido.codigo}}?</h1>
+  {{if pedido.status == 'aguardando_pagamento':}}
+  <div class="aviso aviso-info" style="margin:0 0 1rem">Nenhum valor foi cobrado. Os itens voltam para o estoque.</div>
+  {{else:}}
+  <div class="aviso aviso-alerta" style="margin:0 0 1rem">Pagamento já confirmado: o valor de {{=moeda(pedido.total)}} será estornado em até 5 dias úteis e os itens voltam para o estoque.</div>
+  {{pass}}
+  <ul class="lista-simples">{{for i in itens:}}<li>{{=i.quantidade}}× {{=i.nome_produto}}</li>{{pass}}</ul>
+  <form method="post" action="{{=URL('cliente', 'cancelar', args=[pedido.id])}}" class="formulario-acoes">
+    <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+    <button class="btn btn-perigo" type="submit">Confirmar cancelamento</button>
+    <a class="btn btn-secundario" href="{{=URL('cliente', 'pedido', args=[pedido.id])}}">Manter pedido</a>
+  </form>
+</div>

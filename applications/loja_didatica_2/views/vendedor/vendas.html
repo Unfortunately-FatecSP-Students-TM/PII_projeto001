@@ -1,0 +1,25 @@
+{{extend 'layout.html'}}
+{{response.title = 'Vendas'}}
+{{total = sum(float(l.pedido_item.subtotal) for l in linhas)}}
+<div class="cabecalho-pagina">
+  <div><h1>Vendas</h1><p>Itens vendidos em pedidos não cancelados{{if not eh_admin():}} dos seus produtos{{pass}}.</p></div>
+  <div class="numero"><b>{{=moeda(total)}}</b><span>{{=len(linhas)}} item(ns) vendido(s)</span></div>
+</div>
+<div class="tabela-wrap">
+  <table class="tabela empilha">
+    <thead><tr><th>Pedido</th><th>Data</th><th>Produto</th><th class="num">Qtd</th><th class="num">Subtotal</th><th>Situação do pedido</th></tr></thead>
+    <tbody>
+    {{if not linhas:}}<tr><td colspan="6" class="vazio">Nenhuma venda ainda.</td></tr>{{pass}}
+    {{for l in linhas:}}
+      <tr>
+        <td data-rotulo="Pedido" class="mono">{{=l.pedido.codigo}}</td>
+        <td data-rotulo="Data">{{=data_br(l.pedido.data_pedido)}}</td>
+        <td data-rotulo="Produto">{{=l.pedido_item.nome_produto}}</td>
+        <td data-rotulo="Qtd" class="num">{{=l.pedido_item.quantidade}}</td>
+        <td data-rotulo="Subtotal" class="num">{{=moeda(l.pedido_item.subtotal)}}</td>
+        <td data-rotulo="Situação"><span class="etiqueta {{=l.pedido.status}}">{{=rotulo_pedido(l.pedido.status)}}</span></td>
+      </tr>
+    {{pass}}
+    </tbody>
+  </table>
+</div>

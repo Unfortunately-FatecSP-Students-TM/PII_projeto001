@@ -1,0 +1,87 @@
+{{extend 'layout.html'}}
+{{response.title = 'Pedido ' + pedido.codigo}}
+<p class="pequeno"><a href="{{=URL('operador', 'pedidos')}}">Pedidos</a> › {{=pedido.codigo}}</p>
+<div class="cabecalho-pagina">
+  <div><h1>Pedido <span class="mono">{{=pedido.codigo}}</span></h1>
+  <p>{{=data_br(pedido.data_pedido)}} · {{=nome_usuario(cliente)}} {{if cliente:}}({{=cliente.email}}{{if cliente.telefone:}}, {{=cliente.telefone}}{{pass}}){{pass}} · rastreio <span class="mono">{{=pedido.codigo_rastreio}}</span></p></div>
+  <span class="etiqueta {{=pedido.status}}" style="font-size:.95rem">{{=rotulo_pedido(pedido.status)}}</span>
+</div>
+
+<div class="grade grade-2">
+  <div class="cartao">
+    <h2>Entrega</h2>
+    {{if pedido.status in FLUXO_ENTREGA:}}
+    <form method="post" action="{{=URL('operador', 'pedido', args=[pedido.id])}}">
+      <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+      <div class="campo"><label for="status">Etapa atual</label>
+        <select id="status" name="status">
+          {{for s in FLUXO_ENTREGA:}}<option value="{{=s}}" {{='selected' if s == pedido.status else ''}}>{{=rotulo_pedido(s)}}</option>{{pass}}
+        </select></div>
+      <button class="btn btn-primario" type="submit" name="acao" value="status">Salvar etapa</button>
+    </form>
+    {{elif pedido.status == 'aguardando_pagamento':}}
+    <p class="texto-2">Aguardando pagamento. PIX: <span class="etiqueta {{=pix.status if pix else ''}}">{{=rotulo_pix(pix.status) if pix else '—'}}</span></p>
+    {{if pix and pix.status in ('gerado', 'informado'):}}
+    <form method="post" action="{{=URL('operador', 'decidir_pix')}}" class="acoes">
+      <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+      <input type="hidden" name="pix_id" value="{{=pix.id}}">
+      <input type="text" name="observacao" placeholder="Observação (opcional)" style="flex:1;min-width:200px">
+      <button class="btn btn-ok" type="submit" name="decisao" value="confirmar">Confirmar recebimento</button>
+      <button class="btn btn-perigo" type="submit" name="decisao" value="recusar">Recusar</button>
+    </form>
+    {{pass}}
+    {{else:}}
+    <p class="texto-2">Pedido cancelado em {{=data_br(pedido.data_cancelamento)}}. {{=pedido.observacao}}</p>
+    {{pass}}
+    {{if pode_cancelar(pedido):}}
+    <details class="mt-1">
+      <summary class="pequeno texto-2" style="cursor:pointer">Cancelar este pedido (devolve o estoque)</summary>
+      <form method="post" action="{{=URL('operador', 'pedido', args=[pedido.id])}}" class="acoes mt-1" data-confirmar="Cancelar o pedido {{=pedido.codigo}} e devolver os itens ao estoque?">
+        <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+        <input type="text" name="motivo" placeholder="Motivo" required style="flex:1;min-width:200px">
+        <button class="btn btn-perigo" type="submit" name="acao" value="cancelar">Cancelar pedido</button>
+      </form>
+    </details>
+    {{pass}}
+  </div>
+
+  <div class="cartao">
+    <h2>Itens</h2>
+    <div class="tabela-wrap">
+      <table class="tabela">
+        <thead><tr><th>Produto</th><th class="num">Qtd</th><th class="num">Subtotal</th></tr></thead>
+        <tbody>
+        {{for i in itens:}}<tr><td>{{=i.nome_produto}} <span class="mono pequeno texto-3">{{=i.codigo_produto}}</span></td><td class="num">{{=i.quantidade}} × {{=moeda(i.preco_unitario)}}</td><td class="num">{{=moeda(i.subtotal)}}</td></tr>{{pass}}
+          <tr><td colspan="2"><strong>Total</strong></td><td class="num"><strong>{{=moeda(pedido.total)}}</strong></td></tr>
+        </tbody>
+      </table>
+    </div>
+    {{if pix:}}
+    <h3 class="mt-1">PIX</h3>
+    <dl class="definicoes pequeno">
+      <dt>txid</dt><dd class="mono">{{=pix.txid}}</dd>
+      <dt>Situação</dt><dd><span class="etiqueta {{=pix.status}}">{{=rotulo_pix(pix.status)}}</span></dd>
+      {{if pix.informado_em:}}<dt>Informado em</dt><dd>{{=data_br(pix.informado_em)}}</dd>{{pass}}
+      {{if pix.decidido_em:}}<dt>Decidido em</dt><dd>{{=data_br(pix.decidido_em)}} por {{=nome_usuario(pix.operador) if pix.operador else '—'}}</dd>{{pass}}
+      {{if pix.observacao:}}<dt>Observação</dt><dd>{{=pix.observacao}}</dd>{{pass}}
+    </dl>
+    {{pass}}
+  </div>
+
+  <div class="cartao">
+    <h2>Movimentos de estoque deste pedido</h2>
+    <ul class="lista-simples pequeno">
+      {{if not movimentos:}}<li class="texto-3">Nenhum.</li>{{pass}}
+      {{for m in movimentos:}}<li>{{=data_br(m.criado_em)}} — {{=TIPO_MOVIMENTO_ROTULO.get(m.tipo, m.tipo)}} {{='+' if m.quantidade > 0 else ''}}{{=m.quantidade}} de {{=m.produto.nome if m.produto else '?'}} (saldo {{=m.saldo_apos}})</li>{{pass}}
+    </ul>
+  </div>
+
+  <div class="cartao">
+    <h2>Reclamação</h2>
+    {{if reclamacao:}}
+    <p><span class="etiqueta {{=reclamacao.status}}">{{=rotulo_reclamacao(reclamacao.status)}}</span> <span class="pequeno texto-3">{{=data_br(reclamacao.criado_em)}}</span></p>
+    <div class="mensagem"><div class="texto">{{=reclamacao.texto}}</div>{{if reclamacao.resposta:}}<div class="resposta">{{=reclamacao.resposta}}</div>{{pass}}</div>
+    <a class="btn btn-secundario btn-p" href="{{=URL('operador', 'responder', args=[reclamacao.id])}}">Responder</a>
+    {{else:}}<p class="texto-3">Nenhuma reclamação para este pedido.</p>{{pass}}
+  </div>
+</div>

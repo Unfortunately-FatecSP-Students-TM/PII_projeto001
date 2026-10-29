@@ -1,0 +1,66 @@
+{{extend 'layout.html'}}
+{{response.title = p.nome}}
+<p class="pequeno"><a href="{{=URL('default', 'index')}}">Catálogo</a> › {{=p.categoria.nome if p.categoria else 'Sem categoria'}}</p>
+<div class="detalhe">
+  <div class="foto-grande"><img src="{{=url_imagem(p, mini=False)}}" alt="{{=p.nome}}"></div>
+  <div class="cartao">
+    <h1>{{=p.nome}}</h1>
+    <p class="texto-3 mono pequeno">{{=p.codigo}}{{if not p.ativo:}} · <span class="etiqueta inativo">fora do catálogo</span>{{pass}}</p>
+    <p class="preco" style="font-size:1.8rem">{{=moeda(p.preco)}}</p>
+    <p>{{=p.descricao or 'Sem descrição.'}}</p>
+    <p><strong>Estado:</strong> {{=p.estado}}</p>
+    {{if p.console:}}<p><strong>Console:</strong> {{=p.console}}</p>{{pass}}
+    <p class="avaliacao">{{if avaliacao:}}★ {{='%.1f' % avaliacao['media']}} / 5 · {{=avaliacao['quantidade']}} avaliação(ões){{else:}}Ainda sem avaliações{{pass}}</p>
+    <dl class="definicoes">
+      <dt>Entrega</dt><dd>em até {{=p.prazo_dias}} dias úteis</dd>
+      <dt>Estoque</dt>
+      <dd>{{if p.estoque == 0:}}<span class="estoque-info zerado">Esgotado</span>
+          {{elif p.estoque <= 5:}}<span class="estoque-info baixo">Só {{=p.estoque}} unidade(s)</span>
+          {{else:}}{{=p.estoque}} unidades{{pass}}</dd>
+      <dt>Vendido por</dt><dd>{{=nome_usuario(p.vendedor) if p.vendedor else NOME_LOJA}}</dd>
+    </dl>
+    <div class="mt-1">
+    {{if pode_avaliar:}}
+    <form method="post" action="{{=URL('cliente', 'avaliar_produto', args=[p.id])}}" class="cartao mt-1">
+      <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+      <label for="nota">{{='Atualize sua avaliação' if minha_avaliacao else 'Avalie este produto'}}</label>
+      <div class="acoes mt-1">
+        <select id="nota" name="nota" required>
+          <option value="">Escolha uma nota</option>
+          {{for nota in range(5, 0, -1):}}<option value="{{=nota}}" {{='selected' if minha_avaliacao and minha_avaliacao.nota == nota else ''}}>{{=nota}} {{='estrela' if nota == 1 else 'estrelas'}}</option>{{pass}}
+        </select>
+        <button class="btn btn-secundario" type="submit">Enviar avaliação</button>
+      </div>
+    </form>
+    {{elif tem_papel('cliente'):}}
+    <p class="pequeno texto-2 mt-1">Você poderá avaliar após a entrega de um pedido com este produto.</p>
+    {{pass}}
+    {{if tem_papel('cliente'):}}
+      {{if p.estoque > 0 and p.ativo:}}
+      <form method="post" action="{{=URL('cliente', 'adicionar', args=[p.id])}}" class="acoes" id="form-adicionar">
+        <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+        <label for="qtd" class="pequeno">Quantidade</label>
+        <input id="qtd" type="number" name="quantidade" value="1" min="1" max="{{=p.estoque}}" style="width:6rem">
+        <button class="btn btn-primario" type="submit">Adicionar ao carrinho</button>
+      </form>
+      <form method="post" action="{{=URL('cliente', 'desejo_adicionar', args=[p.id])}}" class="mt-1">
+        <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+        <button class="btn btn-secundario" type="submit" {{if na_lista_desejo:}}disabled{{pass}}>
+          {{='Adicionar à lista de desejos' if not na_lista_desejo else 'Já está na lista de desejos'}}
+        </button>
+      </form>
+      {{else:}}
+      <button class="btn btn-primario" disabled>Esgotado</button>
+      <form method="post" action="{{=URL('cliente', 'desejo_adicionar', args=[p.id])}}" class="mt-1">
+        <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+        <button class="btn btn-secundario" type="submit" {{if na_lista_desejo:}}disabled{{pass}}>
+          {{='Adicionar à lista de desejos' if not na_lista_desejo else 'Já está na lista de desejos'}}
+        </button>
+      </form>
+      {{pass}}
+    {{elif not auth.user:}}
+      <a class="btn btn-secundario" href="{{=URL('default', 'login')}}">Entre para comprar</a>
+    {{pass}}
+    </div>
+  </div>
+</div>

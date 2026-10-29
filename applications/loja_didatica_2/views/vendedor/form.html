@@ -1,0 +1,80 @@
+{{extend 'layout.html'}}
+{{response.title = 'Editar produto' if p else 'Novo produto'}}
+{{def campo(nome, rotulo, tipo='text', valor='', ajuda='', extra=''):}}
+  <div class="campo">
+    <label for="{{=nome}}">{{=rotulo}}</label>
+    <input id="{{=nome}}" type="{{=tipo}}" name="{{=nome}}" value="{{=valor}}" {{=XML(extra)}}
+           {{if erros.get(nome):}}aria-invalid="true"{{pass}}>
+    {{if erros.get(nome):}}<span class="erro-campo">{{=erros[nome]}}</span>{{elif ajuda:}}<span class="ajuda">{{=ajuda}}</span>{{pass}}
+  </div>
+{{return}}
+<p class="pequeno"><a href="{{=URL('vendedor', 'index')}}">Produtos</a> › {{='Editar ' + p.codigo if p else 'Novo produto'}}</p>
+<div class="cabecalho-pagina">
+  <div><h1>{{='Editar produto' if p else 'Novo produto'}}</h1>
+  <p>{{if p:}}Código <span class="mono">{{=p.codigo}}</span> · estoque atual {{=p.estoque}} (ajuste em <a href="{{=URL('vendedor', 'estoque')}}">Estoque</a>){{else:}}O código do produto é gerado automaticamente.{{pass}}</p></div>
+</div>
+
+<form method="post" enctype="multipart/form-data" action="{{=URL('vendedor', 'editar', args=[p.id]) if p else URL('vendedor', 'novo')}}">
+  <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+  <div class="grade grade-2">
+    <div class="cartao">
+      <h2>Dados</h2>
+      {{campo('nome', 'Nome', valor=dados['nome'], extra='required maxlength="120" autofocus')}}
+      <div class="campo">
+        <label for="descricao">Descrição</label>
+        <textarea id="descricao" name="descricao">{{=dados['descricao'] or ''}}</textarea>
+      </div>
+      <div class="campo">
+        <label for="categoria">Categoria</label>
+        <select id="categoria" name="categoria" {{if erros.get('categoria'):}}aria-invalid="true"{{pass}}>
+          <option value="">Sem categoria</option>
+          {{for c in categorias:}}<option value="{{=c.id}}" {{='selected' if str(dados['categoria']) == str(c.id) else ''}}>{{=c.nome}}</option>{{pass}}
+        </select>
+        {{if erros.get('categoria'):}}<span class="erro-campo">{{=erros['categoria']}}</span>{{pass}}
+      </div>
+      <div class="campo-linha">
+        <div class="campo">
+          <label for="console">Console</label>
+          <select id="console" name="console" {{if erros.get('console'):}}aria-invalid="true"{{pass}}>
+            <option value="">Sem console / não se aplica</option>
+            {{for c in consoles:}}<option value="{{=c}}" {{='selected' if dados['console'] == c else ''}}>{{=c}}</option>{{pass}}
+          </select>
+          {{if erros.get('console'):}}<span class="erro-campo">{{=erros['console']}}</span>{{pass}}
+        </div>
+        <div class="campo">
+          <label for="estado">Estado do produto</label>
+          <select id="estado" name="estado" required {{if erros.get('estado'):}}aria-invalid="true"{{pass}}>
+            <option value="">Selecione o estado</option>
+            {{for estado in estados:}}<option value="{{=estado}}" {{='selected' if dados['estado'] == estado else ''}}>{{=estado}}</option>{{pass}}
+          </select>
+          {{if erros.get('estado'):}}<span class="erro-campo">{{=erros['estado']}}</span>{{pass}}
+        </div>
+      </div>
+      <div class="campo-linha">
+        {{campo('preco', 'Preço (R$)', 'text', dados['preco'], 'Ex.: 49,90', 'required inputmode="decimal"')}}
+        {{campo('prazo_dias', 'Prazo de entrega (dias úteis)', 'number', dados['prazo_dias'], '', 'required min="1" max="365"')}}
+        {{if not p:}}{{campo('estoque_inicial', 'Estoque inicial', 'number', dados['estoque_inicial'], 'Gera um movimento de entrada', 'min="0"')}}{{pass}}
+      </div>
+      <label class="campo-caixa"><input type="checkbox" name="ativo" value="1" {{='checked' if dados['ativo'] else ''}}> Exibir no catálogo</label>
+    </div>
+
+    <div class="cartao">
+      <h2>Imagem</h2>
+      <p class="pequeno texto-2">Qualquer JPEG, PNG, GIF, WEBP, BMP ou TIFF até 5 MB. O servidor recorta ao centro para {{=IMAGEM_W}}×{{=IMAGEM_H}} e gera a miniatura {{=MINI_W}}×{{=MINI_H}}, ambas em JPEG.</p>
+      <div class="upload-area">
+        {{tem = bool(p and p.imagem)}}
+        <img class="previa {{='' if tem else 'oculto'}}" src="{{=url_imagem(p, mini=False) if tem else ''}}" alt="Pré-visualização">
+        <div class="previa previa-vazia {{='oculto' if tem else ''}}">Arraste uma imagem aqui ou escolha um arquivo</div>
+        <div>
+          <input type="file" name="imagem" accept="image/*">
+          <p class="info-arquivo">{{if tem:}}Imagem atual: {{=p.imagem}}. Escolha outra para substituir.{{else:}}Nenhuma imagem escolhida.{{pass}}</p>
+          {{if tem:}}<label class="campo-caixa pequeno"><input type="checkbox" name="remover_imagem" value="1"> Remover a imagem atual</label>{{pass}}
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="formulario-acoes">
+    <button class="btn btn-primario" type="submit">{{='Salvar alterações' if p else 'Cadastrar produto'}}</button>
+    <a class="btn btn-secundario" href="{{=URL('vendedor', 'index')}}">Cancelar</a>
+  </div>
+</form>

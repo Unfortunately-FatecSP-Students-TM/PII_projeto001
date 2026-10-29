@@ -1,0 +1,19 @@
+{{extend 'layout.html'}}
+{{response.title = 'Recuperar senha'}}
+<div class="cartao cartao-estreito" style="margin:0 auto">
+  <h1>Recuperar senha</h1>
+  <p class="texto-2">Informe o e-mail cadastrado para receber o link de alteração da senha.</p>
+  {{if erro:}}<div class="aviso aviso-erro" style="margin:0 0 1rem">{{=erro}}</div>{{pass}}
+  {{if mensagem:}}<div class="aviso aviso-info" style="margin:0 0 1rem">{{=mensagem}}</div>{{pass}}
+  <form method="post" action="{{=URL('default', 'recuperar_senha')}}">
+    <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+    <div class="campo">
+      <label for="email">E-mail</label>
+      <input id="email" type="email" name="email" value="{{=email}}" required autofocus autocomplete="email">
+    </div>
+    <div class="formulario-acoes">
+      <button class="btn btn-primario" type="submit">Solicitar recuperação</button>
+      <a class="btn btn-secundario" href="{{=URL('default', 'login')}}">Voltar ao login</a>
+    </div>
+  </form>
+</div>

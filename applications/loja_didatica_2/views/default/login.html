@@ -1,0 +1,34 @@
+{{extend 'layout.html'}}
+{{response.title = 'Entrar'}}
+<div class="cartao cartao-estreito" style="margin:0 auto">
+  <h1>Entrar</h1>
+  <p class="texto-2">Use o e-mail e a senha da sua conta.</p>
+  {{if erro:}}<div class="aviso aviso-erro" style="margin:0 0 1rem">{{=erro}}</div>{{pass}}
+  <form method="post" action="{{=URL('default', 'login')}}">
+    <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+    <div class="campo">
+      <label for="email">E-mail</label>
+      <input id="email" type="email" name="email" value="{{=email}}" required autofocus autocomplete="username">
+    </div>
+    <div class="campo">
+      <label for="senha">Senha</label>
+      <input id="senha" type="password" name="senha" required autocomplete="current-password">
+    </div>
+    <div class="formulario-acoes">
+      <button class="btn btn-primario" type="submit">Entrar</button>
+      <a class="btn btn-secundario" href="{{=URL('default', 'registrar')}}">Criar conta</a>
+    </div>
+  </form>
+  <div class="aviso aviso-info" style="margin-top:1rem">
+    <a href="{{=URL('default', 'recuperar_senha')}}">esqueceu a senha?</a>
+  </div>
+  <details class="mt-1 pequeno texto-2">
+    <summary>Contas de demonstração</summary>
+    <ul class="lista-simples mt-1">
+      <li>admin@loja.com / admin123 — administrador</li>
+      <li>operador@loja.com / operador123 — operador</li>
+      <li>vendedor@loja.com / vendedor123 — vendedor</li>
+      <li>cliente@loja.com / cliente123 — cliente</li>
+    </ul>
+  </details>
+</div>

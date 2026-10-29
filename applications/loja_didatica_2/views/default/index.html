@@ -1,0 +1,31 @@
+{{extend 'layout.html'}}
+{{response.title = 'Jogos clássicos'}}
+<div class="cabecalho-pagina">
+  <div>
+    <h1>Jogos clássicos</h1>
+    <p>Explore jogos físicos e colecionáveis. Filtre por console, preço, categoria, avaliação e estado.</p>
+  </div>
+</div>
+
+<div id="app-catalogo" data-busca="{{=busca}}">
+  <noscript>
+    <div class="aviso aviso-alerta">Este catálogo interativo precisa de JavaScript. Os produtos abaixo são a versão simplificada.</div>
+    <div class="grade-produtos">
+      {{for p in db(db.produto.ativo == True).select(orderby=db.produto.nome):}}
+      <article class="produto-card">
+        <a class="foto" href="{{=URL('default', 'produto', args=[p.id])}}"><img src="{{=url_imagem(p)}}" alt="{{=p.nome}}"></a>
+        <div class="corpo">
+          <a class="nome" href="{{=URL('default', 'produto', args=[p.id])}}">{{=p.nome}}</a>
+          <span class="preco">{{=moeda(p.preco)}}</span>
+        </div>
+      </article>
+      {{pass}}
+    </div>
+  </noscript>
+  <p class="carregando">Carregando catálogo…</p>
+</div>
+
+{{block scripts}}
+{{componente = 'catalogo'}}
+{{include 'react.html'}}
+{{end}}
