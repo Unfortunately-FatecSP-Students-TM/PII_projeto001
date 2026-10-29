@@ -76,6 +76,14 @@ entity "carrinho_item" as carrinho_item {
   * quantidade : INTEGER
   criado_em : DATETIME
 }
+entity "lista_desejo" as lista_desejo {
+  * id : INTEGER <<PK>>
+  --
+  * usuario : INTEGER <<FK auth_user, CASCADE>>
+  * produto : INTEGER <<FK produto, CASCADE>>
+  * chave : VARCHAR(64) <<unique>>
+  criado_em : DATETIME
+}
 entity "pedido" as pedido {
   * id : INTEGER <<PK>>
   --
@@ -142,6 +150,8 @@ pedido     |o--o{ movimento_estoque
 auth_user  |o--o{ movimento_estoque : usuario
 auth_user  ||--o{ carrinho_item
 produto    ||--o{ carrinho_item
+auth_user  ||--o{ lista_desejo
+produto    ||--o{ lista_desejo
 auth_user  |o--o{ pedido : cliente
 pedido     ||--|{ pedido_item
 produto    |o--o{ pedido_item

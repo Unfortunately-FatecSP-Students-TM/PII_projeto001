@@ -103,6 +103,11 @@ package "Compra" {
     +quantidade : int
     +criado_em : datetime
   }
+  class ItemListaDesejo <<lista_desejo>> {
+    +id : int
+    +chave : str  «usuario:produto»
+    +criado_em : datetime
+  }
   class Pedido {
     +id : int
     +codigo : str  «PED-XXXXXXXX»
@@ -163,6 +168,11 @@ package "Regras de negócio (models/regras.py)" <<Rectangle>> {
     +remover_item_carrinho(usuario_id, item_id)
     +limpar_carrinho(usuario_id)
   }
+  class ServicoListaDesejo <<service>> {
+    +itens_lista_desejo(usuario_id)
+    +adicionar_lista_desejo(usuario_id, produto_id)
+    +remover_lista_desejo(usuario_id, produto_id)
+  }
   class ServicoPedido <<service>> {
     +criar_pedido_do_carrinho(usuario_id) : int
     +cancelar_pedido(pedido, motivo, por_operador) : bool
@@ -199,6 +209,8 @@ Usuario   "0..1" <-- "0..*" MovimentoEstoque : quem
 
 Usuario "1" *-- "0..*" ItemCarrinho
 Produto "1" <-- "0..*" ItemCarrinho
+Usuario "1" *-- "0..*" ItemListaDesejo
+Produto "1" <-- "0..*" ItemListaDesejo
 
 Usuario "0..1" <-- "0..*" Pedido : cliente
 Pedido  "1" *-- "1..*" ItemPedido
@@ -216,6 +228,7 @@ PagamentoPix ..> StatusPix
 Reclamacao ..> StatusReclamacao
 
 ServicoCarrinho ..> ItemCarrinho
+ServicoListaDesejo ..> ItemListaDesejo
 ServicoPedido   ..> Pedido
 ServicoPedido   ..> ServicoEstoque : baixa / devolve
 ServicoPedido   ..> ServicoPix : cria PIX
