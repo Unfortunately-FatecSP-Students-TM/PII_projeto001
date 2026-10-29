@@ -1,0 +1,214 @@
+{{extend 'layout.html'}}
+{{response.title = p.nome}}
+
+<p class="pequeno">
+  <a href="{{=URL('default', 'index')}}">Catálogo</a>
+  › {{=p.categoria.nome if p.categoria else 'Sem categoria'}}
+</p>
+
+<div class="detalhe">
+
+  <!-- GALERIA DE IMAGENS -->
+  <div class="galeria-produto">
+
+    <div class="foto-grande">
+      <img
+        id="imagem-principal"
+        src="{{=URL('default', 'imagem', args=[galeria[0]]) if galeria else url_imagem(p, mini=False)}}"
+        alt="{{=p.nome}}"
+      >
+    </div>
+
+    {{if len(galeria) > 1:}}
+    <div class="galeria-miniaturas">
+
+      {{for indice, imagem in enumerate(galeria):}}
+      <button
+        type="button"
+        class="miniatura-galeria{{=' selecionada' if indice == 0 else ''}}"
+        data-imagem="{{=URL('default', 'imagem', args=[imagem])}}"
+        aria-label="Visualizar imagem {{=indice + 1}} de {{=p.nome}}"
+        aria-pressed="{{='true' if indice == 0 else 'false'}}"
+      >
+        <img
+          src="{{=URL('default', 'imagem', args=[imagem])}}"
+          alt="Miniatura {{=indice + 1}}"
+          loading="lazy"
+        >
+      </button>
+      {{pass}}
+
+    </div>
+    {{pass}}
+
+  </div>
+
+  <!-- INFORMAÇÕES DO PRODUTO -->
+  <div class="cartao">
+
+    <h1>{{=p.nome}}</h1>
+
+    <p class="texto-3 mono pequeno">
+      {{=p.codigo}}
+      {{if not p.ativo:}}
+        · <span class="etiqueta inativo">fora do catálogo</span>
+      {{pass}}
+    </p>
+
+    <p class="preco" style="font-size:1.8rem">
+      {{=moeda(p.preco)}}
+    </p>
+
+    <p class="descricao-produto">{{=p.descricao or 'Sem descrição.'}}</p>
+
+    <dl class="definicoes">
+      <dt>Entrega</dt>
+      <dd>em até {{=p.prazo_dias}} dias úteis</dd>
+
+      <dt>Estoque</dt>
+      <dd>
+        {{if p.estoque == 0:}}
+          <span class="estoque-info zerado">Esgotado</span>
+        {{elif p.estoque <= 5:}}
+          <span class="estoque-info baixo">
+            Só {{=p.estoque}} unidade(s)
+          </span>
+        {{else:}}
+          {{=p.estoque}} unidades
+        {{pass}}
+      </dd>
+
+      <dt>Vendido por</dt>
+      <dd>
+        {{=nome_usuario(p.vendedor) if p.vendedor else NOME_LOJA}}
+      </dd>
+    </dl>
+
+    <div class="mt-1">
+
+      {{if tem_papel('cliente'):}}
+
+        {{if p.estoque > 0 and p.ativo:}}
+        <form
+          method="post"
+          action="{{=URL('cliente', 'adicionar', args=[p.id])}}"
+          class="acoes"
+          id="form-adicionar"
+        >
+          <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+
+          <label for="qtd" class="pequeno">Quantidade</label>
+
+          <input
+            id="qtd"
+            type="number"
+            name="quantidade"
+            value="1"
+            min="1"
+            max="{{=p.estoque}}"
+            style="width:6rem"
+          >
+
+          <button class="btn btn-primario" type="submit">
+            Adicionar ao carrinho
+          </button>
+        </form>
+
+        {{else:}}
+          <button class="btn btn-primario" disabled>
+            Esgotado
+          </button>
+        {{pass}}
+
+      {{elif not auth.user:}}
+        <a
+          class="btn btn-secundario"
+          href="{{=URL('default', 'login')}}"
+        >
+          Entre para comprar
+        </a>
+      {{pass}}
+
+    </div>
+  </div>
+</div>
+
+<!-- ESTILOS DA GALERIA -->
+<style>
+.galeria-produto {
+  min-width: 0;
+}
+.descricao-produto {
+    white-space: pre-line;
+    line-height: 1.8;
+}
+.galeria-produto .foto-grande img {
+  width: 100%;
+  display: block;
+  object-fit: contain;
+}
+
+.galeria-miniaturas {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.miniatura-galeria {
+  border: 2px solid transparent;
+  border-radius: 8px;
+  padding: 4px;
+  background: transparent;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.2s, opacity 0.2s;
+}
+
+.miniatura-galeria img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  display: block;
+  border-radius: 5px;
+}
+
+.miniatura-galeria:hover {
+  opacity: 0.75;
+}
+
+.miniatura-galeria.selecionada {
+  border-color: #7952b3;
+}
+
+.miniatura-galeria:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+}
+</style>
+
+<!-- INTERAÇÃO DA GALERIA -->
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+  const imagemPrincipal = document.getElementById('imagem-principal');
+  const miniaturas = document.querySelectorAll('.miniatura-galeria');
+
+  if (!imagemPrincipal) return;
+
+  miniaturas.forEach(function (miniatura) {
+    miniatura.addEventListener('click', function () {
+
+      imagemPrincipal.src = this.dataset.imagem;
+
+      miniaturas.forEach(function (item) {
+        item.classList.remove('selecionada');
+        item.setAttribute('aria-pressed', 'false');
+      });
+
+      this.classList.add('selecionada');
+      this.setAttribute('aria-pressed', 'true');
+
+    });
+  });
+});
+</script>

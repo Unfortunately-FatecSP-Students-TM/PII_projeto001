@@ -1,0 +1,25 @@
+{{extend 'layout.html'}}
+{{response.title = 'Pedidos'}}
+<div class="cabecalho-pagina"><div><h1>Pedidos</h1><p>Todos os pedidos da loja. Clique em um pedido para atualizar a entrega.</p></div></div>
+<div class="chips">
+  <a class="chip {{='ativo' if not filtro else ''}}" href="{{=URL('operador', 'pedidos')}}">Todos</a>
+  {{for s in STATUS_PEDIDO:}}<a class="chip {{='ativo' if filtro == s else ''}}" href="{{=URL('operador', 'pedidos', vars=dict(status=s))}}">{{=rotulo_pedido(s)}}</a>{{pass}}
+</div>
+<div class="tabela-wrap">
+  <table class="tabela empilha">
+    <thead><tr><th>Pedido</th><th>Data</th><th>Cliente</th><th class="num">Total</th><th>Situação</th><th></th></tr></thead>
+    <tbody>
+    {{if not linhas:}}<tr><td colspan="6" class="vazio">Nenhum pedido{{if filtro:}} com esta situação{{pass}}.</td></tr>{{pass}}
+    {{for l in linhas:}}
+      <tr>
+        <td data-rotulo="Pedido"><a class="mono" href="{{=URL('operador', 'pedido', args=[l.pedido.id])}}">{{=l.pedido.codigo}}</a></td>
+        <td data-rotulo="Data">{{=data_br(l.pedido.data_pedido)}}</td>
+        <td data-rotulo="Cliente">{{=nome_usuario(l.auth_user) if l.auth_user.email else '—'}}<br><span class="pequeno texto-3">{{=l.auth_user.email or ''}}</span></td>
+        <td data-rotulo="Total" class="num">{{=moeda(l.pedido.total)}}</td>
+        <td data-rotulo="Situação"><span class="etiqueta {{=l.pedido.status}}">{{=rotulo_pedido(l.pedido.status)}}</span></td>
+        <td class="acoes-td"><a class="btn btn-secundario btn-p" href="{{=URL('operador', 'pedido', args=[l.pedido.id])}}">Abrir</a></td>
+      </tr>
+    {{pass}}
+    </tbody>
+  </table>
+</div>
