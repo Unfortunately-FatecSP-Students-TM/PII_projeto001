@@ -1,0 +1,25 @@
+{{extend 'layout.html'}}
+{{response.title = 'Reclamação'}}
+<p class="pequeno"><a href="{{=URL('cliente', 'pedidos')}}">Meus pedidos</a> › <a href="{{=URL('cliente', 'pedido', args=[pedido.id])}}">{{=pedido.codigo}}</a> › Reclamação</p>
+<div class="cartao cartao-estreito" style="margin:0 auto">
+{{if reclamacao:}}
+  <h1>Reclamação do pedido {{=pedido.codigo}}</h1>
+  <p><span class="etiqueta {{=reclamacao.status}}">{{=rotulo_reclamacao(reclamacao.status)}}</span> <span class="pequeno texto-3">aberta em {{=data_br(reclamacao.criado_em)}}</span></p>
+  <div class="mensagem"><div class="texto">{{=reclamacao.texto}}</div>
+  {{if reclamacao.resposta:}}<div class="resposta"><strong>Resposta da loja</strong> ({{=data_br(reclamacao.respondida_em)}})<br>{{=reclamacao.resposta}}</div>
+  {{elif reclamacao.status == 'aberta':}}<p class="pequeno texto-2 mt-1">Aguardando análise de um operador.</p>{{pass}}</div>
+{{else:}}
+  <h1>Abrir reclamação — {{=pedido.codigo}}</h1>
+  <p class="texto-2">Descreva o problema com detalhes. Um operador responde por aqui.</p>
+  {{if erro:}}<div class="aviso aviso-erro" style="margin:0 0 1rem">{{=erro}}</div>{{pass}}
+  <form method="post" action="{{=URL('cliente', 'reclamacao', args=[pedido.id])}}">
+    <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+    <div class="campo"><label for="texto">O que aconteceu?</label>
+      <textarea id="texto" name="texto" required minlength="10">{{=request.vars.texto or ''}}</textarea></div>
+    <div class="formulario-acoes">
+      <button class="btn btn-primario" type="submit">Enviar reclamação</button>
+      <a class="btn btn-secundario" href="{{=URL('cliente', 'pedido', args=[pedido.id])}}">Voltar</a>
+    </div>
+  </form>
+{{pass}}
+</div>

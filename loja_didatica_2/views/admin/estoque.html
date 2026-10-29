@@ -1,0 +1,19 @@
+{{extend 'layout.html'}}
+{{response.title = 'Conferência de estoque'}}
+<div class="cabecalho-pagina"><div><h1>Conferência de estoque</h1><p>Para cada produto, compara o campo <code>produto.estoque</code> com a soma de <code>movimento_estoque.quantidade</code>. Como toda alteração passa por <code>registrar_movimento()</code>, os dois devem ser sempre iguais.</p></div></div>
+<div class="tabela-wrap">
+  <table class="tabela empilha">
+    <thead><tr><th>Código</th><th>Produto</th><th class="num">Estoque (tabela produto)</th><th class="num">Soma dos movimentos</th><th>Resultado</th></tr></thead>
+    <tbody>
+    {{for d in conferencia:}}
+      <tr>
+        <td data-rotulo="Código" class="mono">{{=d['produto'].codigo}}</td>
+        <td data-rotulo="Produto"><a href="{{=URL('vendedor', 'movimentos', args=[d['produto'].id])}}">{{=d['produto'].nome}}</a></td>
+        <td data-rotulo="Estoque" class="num">{{=d['produto'].estoque}}</td>
+        <td data-rotulo="Movimentos" class="num">{{=d['movimentado']}}</td>
+        <td data-rotulo="Resultado">{{if d['divergente']:}}<span class="etiqueta divergente">divergente</span>{{else:}}<span class="etiqueta ativo">confere</span>{{pass}}</td>
+      </tr>
+    {{pass}}
+    </tbody>
+  </table>
+</div>

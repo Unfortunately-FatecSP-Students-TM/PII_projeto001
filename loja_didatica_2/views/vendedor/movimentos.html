@@ -1,0 +1,26 @@
+{{extend 'layout.html'}}
+{{response.title = 'Movimentos de estoque'}}
+<p class="pequeno"><a href="{{=URL('vendedor', 'index')}}">Produtos</a> › {{=p.codigo}} › Movimentos</p>
+<div class="cabecalho-pagina">
+  <div><h1>{{=p.nome}}</h1><p>Estoque atual <strong>{{=p.estoque}}</strong> · cada linha é um movimento gravado em <code>movimento_estoque</code>.</p></div>
+  <a class="btn btn-secundario" href="{{=URL('vendedor', 'estoque')}}">Ajustar estoque</a>
+</div>
+<div class="tabela-wrap">
+  <table class="tabela empilha">
+    <thead><tr><th>Quando</th><th>Tipo</th><th class="num">Quantidade</th><th class="num">Saldo após</th><th>Motivo</th><th>Pedido</th><th>Quem</th></tr></thead>
+    <tbody>
+    {{if not movimentos:}}<tr><td colspan="7" class="vazio">Nenhum movimento.</td></tr>{{pass}}
+    {{for m in movimentos:}}
+      <tr>
+        <td data-rotulo="Quando">{{=data_br(m.criado_em)}}</td>
+        <td data-rotulo="Tipo">{{=TIPO_MOVIMENTO_ROTULO.get(m.tipo, m.tipo)}}</td>
+        <td data-rotulo="Quantidade" class="num" style="color:{{='var(--ok)' if m.quantidade > 0 else 'var(--erro)'}}">{{='+' if m.quantidade > 0 else ''}}{{=m.quantidade}}</td>
+        <td data-rotulo="Saldo após" class="num">{{=m.saldo_apos}}</td>
+        <td data-rotulo="Motivo">{{=m.motivo or '—'}}</td>
+        <td data-rotulo="Pedido" class="mono">{{=m.pedido.codigo if m.pedido else '—'}}</td>
+        <td data-rotulo="Quem">{{=nome_usuario(m.usuario) if m.usuario else 'sistema'}}</td>
+      </tr>
+    {{pass}}
+    </tbody>
+  </table>
+</div>
