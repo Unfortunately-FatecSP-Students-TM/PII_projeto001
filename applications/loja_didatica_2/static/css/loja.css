@@ -226,6 +226,7 @@ code, .mono { font-family: var(--mono); font-size: .92em; }
   font-size: .85rem; color: var(--texto-2); flex: 1;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
+.avaliacao { color: #875900; font-size: .86rem; font-weight: 600; }
 .preco { font-size: 1.25rem; font-weight: 700; color: var(--azul-800); font-variant-numeric: tabular-nums; }
 .produto-card .rodape-card { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: .35rem; }
 .estoque-info { font-size: .8rem; color: var(--texto-2); }
@@ -242,6 +243,14 @@ code, .mono { font-family: var(--mono); font-size: .92em; }
 /* busca e filtros */
 .barra-busca { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .barra-busca input[type="search"] { flex: 1; min-width: 200px; }
+.filtros-avancados { margin-bottom: 1rem; }
+.filtros-titulo { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.filtros-titulo h2 { margin: 0; font-size: 1.1rem; }
+.filtros-grade { display: grid; gap: 0 1rem; grid-template-columns: 1fr; }
+.filtros-grade .campo { margin-bottom: .75rem; }
+@media (min-width: 600px) { .filtros-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 900px) { .filtros-grade { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.filtros-grade label { font-size: .85rem; }
 .chips { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .chip {
   border: 1px solid var(--borda-forte); background: var(--superficie); color: var(--texto-2);

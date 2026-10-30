@@ -50,7 +50,7 @@ node "Pasta do loja_didatica_2_v2.py (tudo é extraído aqui)" as PASTA {
       component "z_dados_iniciais.py\n(carga inicial)" as SEED
     }
     folder "controllers/" {
-      component "default.py\n(catálogo, login, registro,\nperfil, imagem() → stream)" as C_DEF
+      component "default.py\n(catálogo, login, registro,\nperfil, recuperação de senha,\nimagem() → stream)" as C_DEF
       component "cliente.py" as C_CLI
       component "vendedor.py" as C_VEN
       component "operador.py" as C_OPE
@@ -58,7 +58,7 @@ node "Pasta do loja_didatica_2_v2.py (tudo é extraído aqui)" as PASTA {
       component "api.py\n(JSON para o React)" as C_API
     }
     folder "views/" {
-      component "layout.html + react.html\n+ 32 templates yatl" as VIEWS
+      component "layout.html + react.html\n+ 34 templates yatl" as VIEWS
     }
     folder "static/" {
       component "css/, js/, js/componentes/*.jsx,\njs/componentes/compilado/*.js,\njs/vendor/ (React), images/" as STATIC
@@ -119,7 +119,7 @@ end note
 
 note bottom of SQLITE
   Tabelas: auth_user, auth_group, auth_membership,
-  categoria, produto, movimento_estoque, carrinho_item,
+  categoria, produto, movimento_estoque, carrinho_item, lista_desejo,
   pedido, pedido_item, pagamento_pix, reclamacao, mensagem
   (+ web2py_filesystem com os metadados de migração)
 end note

@@ -3,12 +3,19 @@
 Evolução da *Loja Didática* (`loja_web.py`, `http.server` + CSV) para uma aplicação
 **web2py** completa, no padrão **MVC**, com **SQLite**, **papéis de usuário**
 (cliente, vendedor, operador, administrador), **fake PIX com aprovação manual pelo
-operador**, **carrinho por usuário**, **upload de imagem processado**, **React** no
-front-end e **CSS azul responsivo** — distribuída em **um único arquivo Python**,
-`loja_didatica_2_v2.py`, que **extrai tudo na pasta em que está** na primeira execução.
+operador**, **carrinho e lista de desejos por usuário**, **recuperação de senha por e-mail**,
+**upload de imagem processado**, **React** no
+front-end e **CSS azul responsivo**. O arquivo `loja_didatica_2_v2.py` extrai a aplicação
+web na primeira execução; a pasta `imagens/` acompanha o projeto com as capas dos jogos.
 
 Material didático da disciplina Projeto Integrador em ADS (Fatec São Paulo).
 Uso exclusivamente educacional: o PIX é fictício e nada é cobrado.
+
+No cadastro de produtos, vendedores informam o estado (Novo, Como novo, Muito
+bom, Bom ou Aceitável) e, quando aplicável, o console. Clientes podem avaliar
+produtos de pedidos entregues com notas de 1 a 5 estrelas. O catálogo exibe as
+médias e permite filtrar por console, faixa de preço, categoria, avaliação
+mínima e estado.
 
 ## O que a v2 muda em relação à versão anterior
 
@@ -16,11 +23,11 @@ Uso exclusivamente educacional: o PIX é fictício e nada é cobrado.
 |---|---|---|
 | onde a aplicação é gravada | `<web2py>/applications/loja_didatica_2/` | `applications/loja_didatica_2/` **ao lado do .py** |
 | banco de dados | `<app>/databases/loja.sqlite` (+ arquivos `*.table`) | **`loja.sqlite` ao lado do .py**, sem arquivos auxiliares (migrações guardadas dentro do banco) |
-| imagens dos produtos | pictogramas gerados pelo Pillow em `static/images/produtos/` | **ilustrações de estúdio** (fundo claro, sombra, volumes) embutidas no .py e gravadas em **`imagens/` ao lado do .py**; servidas pela action `default/imagem` |
+| imagens dos produtos | pictogramas gerados pelo Pillow em `static/images/produtos/` | **capas de 46 jogos clássicos** em `imagens/` ao lado do `.py`, com miniaturas e imagens adicionais; servidas pela action `default/imagem` |
 | React / Babel | React local ou CDN + Babel compilando JSX no navegador | React embutido no .py e **componentes pré-compilados** (`compilado/*.js`): funciona sem internet; Babel só entra se um `.jsx` for editado |
 | URL | `http://localhost:8000/loja_didatica_2` | **`http://localhost:8000/`** (routes.py gravado na pasta) |
 | web2py e bibliotecas | tinham de ser instalados antes | a **primeira execução verifica e ajusta o ambiente**: cria `venv/` com Pillow e qrcode, baixa o web2py em `./web2py` se não houver e usa a própria pasta como *applications parent* |
-| tema | azul-marinho com gradiente escuro nas imagens | cabeçalho com gradiente azul mais claro, contrastes revisados (≥ 4,4:1) e imagens em fundo claro |
+| tema | azul-marinho com gradiente escuro nas imagens | cabeçalho com gradiente azul, contrastes revisados (≥ 4,4:1) e catálogo de jogos em imagens com fundo claro |
 | plataformas | testado só no Linux | Windows, Linux e macOS: atalhos `iniciar.bat`/`iniciar.sh`, instalação no venv já ativo, console sem UTF-8 tolerado, download sem certificado de CA tolerado, `--diagnostico` |
 
 ## Primeira execução: o programa prepara o ambiente sozinho
@@ -47,13 +54,14 @@ Na primeira vez ele verifica e ajusta tudo **na própria pasta**, nesta ordem:
 2. **Bibliotecas** — se faltarem Pillow (upload de imagens) ou qrcode (QR Code do PIX), cria o
    ambiente virtual `venv/`, instala as duas com pip e se reexecuta nele. *(No Debian/Ubuntu é
    preciso o pacote `python3-venv`: `sudo apt install python3-venv`.)*
-3. **Aplicação, imagens e rotas** — extrai `applications/loja_didatica_2/` (MVC), grava as 24
-   imagens dos produtos em `imagens/` e o `routes.py` (a loja responde na raiz do site).
+3. **Aplicação e rotas** — extrai `applications/loja_didatica_2/` (MVC) e o `routes.py`
+   (a loja responde na raiz do site). As capas, miniaturas e imagens adicionais dos 46 jogos
+   ficam na pasta `imagens/` e acompanham o projeto.
 4. **web2py** — usa o que encontrar em `./web2py`, `../web2py`, `~/web2py` ou `--web2py DIR`;
    se não houver, baixa em `./web2py` (`git clone --recursive`; sem git, os zips do GitHub de
    web2py, pydal, yatl e rocket3).
 5. **Servidor e banco** — inicia o web2py com esta pasta como *applications parent* e faz a
-   primeira requisição, que cria e povoa `loja.sqlite` (usuários, categorias, 12 produtos com
+   primeira requisição, que cria e povoa `loja.sqlite` (usuários, categorias, 46 jogos com
    estoque). Ao final mostra `banco de dados OK ... pronto! loja em http://127.0.0.1:8000/`
    e abre o navegador.
 
@@ -71,7 +79,7 @@ bibliotecas faltarem, desde que o web2py já esteja ao lado).
 ├── venv/                          ambiente virtual com Pillow e qrcode (criado só se faltarem)
 ├── web2py/                        o framework (baixado só se não for encontrado)
 ├── loja.sqlite                    banco de dados, criado e povoado na 1ª execução
-├── imagens/                       PRD-10001.jpg … PRD-10012.jpg (+ _min) e os uploads do vendedor
+├── imagens/                       capas, miniaturas e imagens adicionais dos jogos + uploads
 ├── routes.py                      faz a loja responder na raiz do site
 ├── parameters_8000.py             senha do admin do web2py (gerado pelo web2py)
 ├── httpserver.log / .pid          registros do servidor
@@ -95,7 +103,7 @@ python loja_didatica_2_v2.py --porta 8080 --senha minhasenha
 python loja_didatica_2_v2.py --extrair-apenas     # só prepara os arquivos, não inicia o servidor
 python loja_didatica_2_v2.py --atualizar          # sobrescreve também os arquivos que você editou
 python loja_didatica_2_v2.py --limpar-banco       # apaga loja.sqlite e recria os dados de exemplo
-python loja_didatica_2_v2.py --regravar-imagens   # regrava as imagens de exemplo
+python loja_didatica_2_v2.py --regravar-imagens   # regrava apenas imagens de exemplo inalteradas
 python loja_didatica_2_v2.py --offline            # não baixa nada nem cria o venv
 python loja_didatica_2_v2.py --sem-venv           # usa o Python atual mesmo sem Pillow/qrcode
 python loja_didatica_2_v2.py --babel              # baixa o Babel para editar os .jsx sem internet
@@ -109,6 +117,31 @@ os arquivos que você **não** alterou (ele compara com o hash guardado em `.ext
 avisa quais foram preservados; `--atualizar` força a versão embutida. Para os componentes React,
 edite o `.jsx`: a página percebe que o hash mudou e passa a compilá-lo no navegador com o Babel
 (CDN, ou cópia local com `--babel`).
+
+### Recuperação de senha por e-mail
+
+O formulário informa quando o endereço não está cadastrado e envia um link seguro para redefinir
+a senha quando a conta existe. Para enviar mensagens, configure o SMTP antes de iniciar a loja.
+No PowerShell, por exemplo:
+
+```powershell
+$env:LOJA_SMTP_SERVER = "smtp.exemplo.com:587"
+$env:LOJA_SMTP_SENDER = "loja@exemplo.com"
+$env:LOJA_SMTP_LOGIN = "loja@exemplo.com:sua-senha-de-aplicativo"
+$env:LOJA_SMTP_TLS = "true"
+$env:LOJA_SMTP_SSL = "false"
+py loja_didatica_2_v2.py
+```
+
+`LOJA_SMTP_LOGIN` é opcional quando o servidor não exige autenticação. Para SSL direto
+(geralmente porta 465), use `LOJA_SMTP_SSL=true` e `LOJA_SMTP_TLS=false`. Mantenha credenciais
+fora do código e do controle de versão. Sem SMTP configurado, a loja avisa que não conseguiu
+enviar o link em vez de afirmar que a mensagem foi enviada.
+
+### Lista de desejos
+
+Clientes podem salvar produtos na página de detalhes e abrir **Lista de desejos** no menu após
+entrar. Os itens ficam persistidos por conta e podem ser removidos da própria lista.
 
 ### Contas de demonstração
 
@@ -141,7 +174,8 @@ criados pelo administrador em *Usuários*.
    React; cada ajuste vira um movimento auditável.
 7. **Administrador** cria usuários e papéis, bloqueia contas, gerencia categorias e
    confere em *Conferência de estoque* que `produto.estoque` = soma dos movimentos.
-8. Abra `loja.sqlite` com o *DB Browser for SQLite* (ou `sqlite3 loja.sqlite`) para
+8. Salve itens na **Lista de desejos**, que permanece associada à conta mesmo depois de sair e entrar.
+9. Abra `loja.sqlite` com o *DB Browser for SQLite* (ou `sqlite3 loja.sqlite`) para
    mostrar as tabelas — o arquivo está ali, ao lado do .py.
 
 ## Arquitetura (MVC do web2py)
@@ -154,10 +188,9 @@ todas em `models/regras.py`.
 
 ### Decisões de projeto
 
-- **Imagens dos produtos.** As 12 ilustrações (camiseta, moletom, boné, caneca, garrafa, mochila,
-  mouse, teclado, headset, hub, caderno, canetas) são desenhos vetoriais em estilo de foto de
-  estúdio — fundo claro, sombra no chão, gradientes para dar volume — renderizados em JPEG
-  800×600 e 400×300; ficam embutidos no `.py` e vão para `imagens/` na primeira execução.
+- **Imagens dos produtos.** O catálogo traz 46 jogos clássicos e suas capas em `imagens/`,
+  incluindo miniaturas e imagens adicionais. As capas são arquivos do projeto e não são
+  substituídas pelas imagens de exemplo embutidas no `.py`.
 - **Tudo na pasta do .py.** `models/db.py` calcula `RAIZ` (dois níveis acima de
   `request.folder`) e usa `<RAIZ>/loja.sqlite` e `<RAIZ>/imagens/`. O lançador inicia o
   web2py no mesmo processo com a pasta do .py como *applications parent* (equivalente a
@@ -171,6 +204,10 @@ todas em `models/regras.py`.
 - **Papéis = grupos do Auth** (`auth_group`/`auth_membership`). Um usuário pode ter vários
   papéis; o administrador passa em qualquer verificação. `requer_papel()` protege as actions
   e os papéis são lidos do banco a cada requisição.
+- **Lista de desejos por conta:** `lista_desejo` relaciona o cliente ao produto; a consulta e
+  remoção sempre filtram pelo usuário autenticado. O mesmo produto não é duplicado na lista.
+- **Recuperação de senha:** o Auth do web2py gera e valida o token de redefinição; o envio real
+  usa os dados SMTP configurados em variáveis `LOJA_SMTP_*`.
 - **Estoque consistente com as vendas:** toda alteração passa por `registrar_movimento()`,
   que grava `movimento_estoque`. A saída usa `UPDATE produto SET estoque = estoque - qtd
   WHERE id = ? AND estoque >= qtd`; se nenhuma linha for alterada, houve corrida pelo último
@@ -199,7 +236,7 @@ todas em `models/regras.py`.
 | `05_estados.puml` | Estados — Pedido, PagamentoPix, Reclamacao e Produto |
 | `06_implantacao.puml` | Implantação — pasta do projeto, web2py em pasta separada, GitHub/CDN opcionais |
 | `07_sequencia.puml` | Sequência — compra (com as imagens via `default/imagem`), aprovação manual do PIX e upload de imagem |
-| `08_modelo_dados.puml` | Modelo de dados — as 12 tabelas usadas pela loja em `loja.sqlite`, com chaves e cardinalidades |
+| `08_modelo_dados.puml` | Modelo de dados — as tabelas usadas pela loja em `loja.sqlite`, com chaves e cardinalidades |
 
 Renderização: `java -jar plantuml.jar -tpng modelagem/*.puml` (ou a extensão PlantUML do VS Code).
 
@@ -207,7 +244,8 @@ Renderização: `java -jar plantuml.jar -tpng modelagem/*.puml` (ou a extensão 
 
 | Caminho | O que é |
 |---|---|
-| `loja_didatica_2_v2.py` | **Entregável principal** — arquivo único (aplicação + React + imagens + lançador). |
+| `loja_didatica_2_v2.py` | **Entregável principal** — fonte da aplicação, React e lançador. |
+| `imagens/` | Capas, miniaturas e imagens adicionais dos 46 jogos, além de uploads de produtos. |
 | `iniciar.sh`, `iniciar.bat` | Atalhos de inicialização para Linux/macOS e Windows (o .py também os recria). |
 | `modelagem/` | 8 diagramas UML em PlantUML (`.puml`) com os `.png` renderizados. |
 | `capturas/` | Telas da aplicação (desktop e celular). |

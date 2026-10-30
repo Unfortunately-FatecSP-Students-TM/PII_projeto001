@@ -11,35 +11,31 @@ def index():
     categorias = db(db.categoria).select(orderby=db.categoria.nome)
     return dict(categorias=categorias, busca=request.vars.q or '')
 
+
 def produto():
-    """Detalhe de um produto com galeria de imagens."""
+    """Detalhe de um produto (view clássica renderizada no servidor)."""
     p = db.produto(request.args(0, cast=int)) if request.args else None
-    if not p or (not p.ativo and not tem_papel('vendedor', 'operador', 'administrador')):
+    pode_revisar = bool(p and tem_papel('cliente') and
+                        cliente_pode_avaliar(auth.user_id, p.id))
+    if not p or (not p.ativo and not pode_revisar and
+                 not tem_papel('vendedor', 'operador', 'administrador')):
         avisar('erro', 'Produto não encontrado.')
         redirect(URL('index'))
+    avaliacao = resumo_avaliacoes([p.id]).get(p.id, {})
+    minha_avaliacao = (db((db.avaliacao_produto.produto == p.id) &
+                          (db.avaliacao_produto.cliente == auth.user_id)
+                          ).select().first() if tem_papel('cliente') else None)
+    return dict(p=p, no_carrinho=quantidade_carrinho(auth.user_id),
+                avaliacao=avaliacao, minha_avaliacao=minha_avaliacao,
+                pode_avaliar=pode_revisar,
+                na_lista_desejo=(produto_na_lista_desejo(auth.user_id, p.id)
+                                 if tem_papel('cliente') else False))
 
-    # Lista de imagens do produto
-    galeria = []
-
-    # Imagem principal cadastrada no banco
-    if p.imagem and os.path.isfile(caminho_imagem(p.imagem)):
-        galeria.append(p.imagem)
-
-    # Imagens adicionais: PRD-10001_2.jpg, PRD-10001_3.jpg etc.
-    numero = 2
-    while numero <= 20:
-        nome_imagem = '{}_{}.jpg'.format(p.codigo, numero)
-        if os.path.isfile(caminho_imagem(nome_imagem)):
-            galeria.append(nome_imagem)
-        numero += 1
-    return dict(
-        p=p,
-        galeria=galeria,
-        no_carrinho=quantidade_carrinho(auth.user_id))    
 
 def sobre():
     """Página que explica a arquitetura do projeto (material de aula)."""
     return dict()
+
 
 def imagem():
     """Serve as imagens dos produtos, que ficam em <RAIZ>/imagens/ (ao lado do .py),
@@ -57,6 +53,13 @@ def imagem():
 # -----------------------------------------------------------------------------
 #  Autenticação — formulários próprios usando o Auth do web2py por baixo
 # -----------------------------------------------------------------------------
+def user():
+    """Expõe somente a action Auth usada pelo link de redefinição de senha."""
+    if not request.args or request.args(0) != 'reset_password':
+        raise HTTP(404, 'Ação de autenticação não encontrada.')
+    return dict(form=auth())
+
+
 def login():
     if auth.user:
         redirect(pagina_inicial_do_papel())
@@ -74,6 +77,31 @@ def login():
             redirect(destino)
         erro = 'E-mail ou senha incorretos.'
     return dict(erro=erro, email=request.vars.email or '')
+
+
+def recuperar_senha():
+    email = (request.vars.email or '').strip().lower()
+    erro = ''
+    mensagem = ''
+    if request.env.request_method == 'POST':
+        exigir_post_seguro()
+        if IS_EMAIL()(email)[1] is not None:
+            erro = 'Informe um e-mail válido.'
+        else:
+            usuario = db(db.auth_user.email == email).select().first()
+            if not usuario:
+                erro = 'Nenhum e-mail foi encontrado com esse endereço.'
+            elif (not auth.settings.mailer or
+                  not auth.settings.mailer.settings.server or
+                  not auth.settings.mailer.settings.sender or
+                  str(auth.settings.mailer.settings.server).lower() == 'logging'):
+                erro = ('Encontramos a conta, mas o envio de e-mail não está configurado. '
+                        'Entre em contato com o administrador da loja.')
+            elif auth.email_reset_password(usuario):
+                mensagem = 'Um e-mail para alterar sua senha foi enviado.'
+            else:
+                erro = 'Encontramos a conta, mas não foi possível enviar o e-mail.'
+    return dict(erro=erro, email=email, mensagem=mensagem)
 
 
 def registrar():

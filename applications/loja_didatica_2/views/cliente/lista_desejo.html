@@ -1,0 +1,35 @@
+{{extend 'layout.html'}}
+{{response.title = 'Lista de desejos'}}
+<div class="cabecalho-pagina">
+  <div><h1>Minha lista de desejos</h1><p>Produtos que você salvou para consultar depois.</p></div>
+  <a class="btn btn-secundario" href="{{=URL('default', 'index')}}">Voltar ao catálogo</a>
+</div>
+{{if not itens:}}
+<div class="cartao vazio-caixa">
+  <p>Sua lista de desejos está vazia.</p>
+  <a class="btn btn-primario" href="{{=URL('default', 'index')}}">Explorar produtos</a>
+</div>
+{{else:}}
+<div class="grade-produtos">
+  {{for linha in itens:}}
+    {{p = linha.produto}}
+    <article class="produto-card">
+      <a class="foto" href="{{=URL('default', 'produto', args=[p.id])}}">
+        <img src="{{=url_imagem(p)}}" alt="{{=p.nome}}" loading="lazy">
+      </a>
+      <div class="corpo">
+        <span class="categoria">{{=p.codigo}}</span>
+        <a class="nome" href="{{=URL('default', 'produto', args=[p.id])}}">{{=p.nome}}</a>
+        <span class="preco">{{=moeda(p.preco)}}</span>
+        {{if not p.ativo:}}<span class="estoque-info zerado">Produto indisponível</span>{{pass}}
+      </div>
+      <div class="comprar">
+        <form method="post" action="{{=URL('cliente', 'desejo_remover', args=[p.id])}}">
+          <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+          <button class="btn btn-secundario btn-largo" type="submit">Remover da lista</button>
+        </form>
+      </div>
+    </article>
+  {{pass}}
+</div>
+{{pass}}

@@ -82,6 +82,7 @@ Funcionalidades
 ---------------
   • Catálogo com busca e filtro por categoria (React <Catalogo/> + API JSON)
   • Cadastro de clientes; operadores, vendedores e administradores criados pelo admin
+  • Tela de recuperação de senha por e-mail (envio do link depende de configuração SMTP)
   • Papéis = grupos do Auth do web2py (um usuário pode ter vários papéis)
   • Carrinho por usuário persistente no SQLite (React <Carrinho/>)
   • Pedido em transação única: baixa de estoque, itens com preço "congelado" e PIX
@@ -153,7 +154,7 @@ import hashlib
 import sqlite3
 from decimal import Decimal
 
-from gluon.tools import Auth
+from gluon.tools import Auth, Mail
 
 # o driver sqlite3 não aceita Decimal como parâmetro; gravamos como número real
 sqlite3.register_adapter(Decimal, float)
@@ -185,6 +186,15 @@ response.generic_patterns = []          # não expõe views genéricas (.json/.x
 # 2. Constantes da loja
 # -----------------------------------------------------------------------------
 NOME_LOJA = 'Loja Didática 2'
+
+CONSOLES = [
+    'PlayStation', 'PlayStation 1', 'PlayStation 2', 'PlayStation 3', 'PSP', 'PS Vita',
+    'NES', 'Super Nintendo', 'Game Boy', 'Game Boy Color', 'Game Boy Advance',
+    'Nintendo DS', 'Nintendo 3DS', 'Nintendo 64', 'GameCube', 'Wii', 'Wii U',
+    'Master System', 'Sega Genesis', 'Dreamcast', 'Xbox', 'Xbox 360',
+    'Nintendo Switch', 'PC', 'Atari 2600',
+]
+ESTADOS_PRODUTO = ['Novo', 'Como novo', 'Muito bom', 'Bom', 'Aceitável']
 
 PAPEIS = ['cliente', 'vendedor', 'operador', 'administrador']
 PAPEL_DESCRICAO = {
@@ -248,9 +258,23 @@ auth.settings.expiration = 8 * 3600                      # sessão de 8 horas
 auth.settings.login_url = URL('default', 'login')
 auth.settings.logout_next = URL('default', 'index')
 auth.settings.on_failed_authorization = URL('default', 'sem_permissao')
-auth.settings.actions_disabled = ['register', 'retrieve_username',
-                                  'request_reset_password', 'reset_password',
-                                  'verify_email', 'impersonate', 'groups']
+auth.settings.actions_disabled = [
+    'login', 'logout', 'register', 'profile', 'change_password',
+    'retrieve_password', 'retrieve_username', 'request_reset_password',
+    'bulk_register', 'verify_email', 'impersonate', 'groups',
+]
+
+smtp_server = os.environ.get('LOJA_SMTP_SERVER', '').strip()
+smtp_sender = os.environ.get('LOJA_SMTP_SENDER', '').strip()
+if smtp_server and smtp_sender:
+    smtp_login = os.environ.get('LOJA_SMTP_LOGIN', '').strip() or None
+    smtp_tls = os.environ.get('LOJA_SMTP_TLS', 'true').strip().lower() not in (
+        '0', 'false', 'no', 'off')
+    smtp_ssl = os.environ.get('LOJA_SMTP_SSL', 'false').strip().lower() in (
+        '1', 'true', 'yes', 'on')
+    auth.settings.mailer = Mail(server=smtp_server, sender=smtp_sender,
+                                login=smtp_login, tls=smtp_tls)
+    auth.settings.mailer.settings.ssl = smtp_ssl
 
 db.auth_user.first_name.label = 'Nome'
 db.auth_user.last_name.label = 'Sobrenome'
@@ -272,6 +296,10 @@ db.define_table('produto',
     Field('nome', 'string', length=120, notnull=True, requires=IS_NOT_EMPTY(), label='Nome'),
     Field('descricao', 'text', default='', label='Descrição'),
     Field('categoria', 'reference categoria', ondelete='SET NULL', label='Categoria'),
+    Field('console', 'string', length=30, default='', requires=IS_IN_SET([''] + CONSOLES),
+          label='Console'),
+    Field('estado', 'string', length=20, notnull=True, default='Novo',
+          requires=IS_IN_SET(ESTADOS_PRODUTO), label='Estado'),
     Field('preco', 'decimal(10,2)', notnull=True, default=0,
           requires=IS_DECIMAL_IN_RANGE(0, 999999), label='Preço (R$)'),
     Field('estoque', 'integer', notnull=True, default=0,
@@ -285,6 +313,14 @@ db.define_table('produto',
     Field('atualizado_em', 'datetime', default=request.now, update=request.now,
           writable=False),
     format='%(codigo)s - %(nome)s')
+
+db.define_table('avaliacao_produto',
+    Field('produto', 'reference produto', ondelete='CASCADE', notnull=True),
+    Field('cliente', 'reference auth_user', ondelete='CASCADE', notnull=True),
+    Field('nota', 'integer', notnull=True, requires=IS_INT_IN_RANGE(1, 6)),
+    Field('chave', 'string', length=64, notnull=True, unique=True, writable=False),
+    Field('criado_em', 'datetime', default=request.now),
+    Field('atualizado_em', 'datetime', default=request.now, update=request.now))
 
 db.define_table('pedido',
     Field('codigo', 'string', length=16, notnull=True, unique=True),      # PED-XXXXXXXX
@@ -327,6 +363,13 @@ db.define_table('carrinho_item',
     Field('usuario', 'reference auth_user', ondelete='CASCADE', notnull=True),
     Field('produto', 'reference produto', ondelete='CASCADE', notnull=True),
     Field('quantidade', 'integer', notnull=True, default=1),
+    Field('criado_em', 'datetime', default=request.now))
+
+# Lista de desejos persistente: uma entrada por combinação de usuário e produto.
+db.define_table('lista_desejo',
+    Field('usuario', 'reference auth_user', ondelete='CASCADE', notnull=True),
+    Field('produto', 'reference produto', ondelete='CASCADE', notnull=True),
+    Field('chave', 'string', length=64, notnull=True, unique=True, writable=False),
     Field('criado_em', 'datetime', default=request.now))
 
 # Pagamento PIX fictício — um por pedido; aprovado manualmente por um operador
@@ -609,11 +652,70 @@ def itens_carrinho(usuario_id):
               ).select(orderby=db.carrinho_item.id)
 
 
-def produto_para_json(p):
+def itens_lista_desejo(usuario_id):
+    """Produtos salvos na lista de desejos do usuário."""
+    return db((db.lista_desejo.usuario == usuario_id) &
+              (db.lista_desejo.produto == db.produto.id)
+              ).select(orderby=~db.lista_desejo.criado_em)
+
+
+def produto_na_lista_desejo(usuario_id, produto_id):
+    """Indica se o produto já está salvo pelo usuário."""
+    return bool(db((db.lista_desejo.usuario == usuario_id) &
+                   (db.lista_desejo.produto == produto_id)).count())
+
+
+def adicionar_lista_desejo(usuario_id, produto_id):
+    """Salva um produto ativo sem duplicar a entrada do usuário."""
+    produto = db.produto[produto_id]
+    if not produto or not produto.ativo:
+        raise ErroDeNegocio('Produto indisponível.')
+    if produto_na_lista_desejo(usuario_id, produto_id):
+        return produto, False
+    db.lista_desejo.insert(usuario=usuario_id, produto=produto_id,
+                           chave='%s:%s' % (usuario_id, produto_id))
+    return produto, True
+
+
+def remover_lista_desejo(usuario_id, produto_id):
+    """Remove apenas o produto que pertence à lista do usuário."""
+    return db((db.lista_desejo.usuario == usuario_id) &
+              (db.lista_desejo.produto == produto_id)).delete()
+
+
+def resumo_avaliacoes(produto_ids):
+    """Retorna nota média e quantidade de avaliações por produto."""
+    if not produto_ids:
+        return {}
+    soma = db.avaliacao_produto.nota.sum()
+    quantidade = db.avaliacao_produto.id.count()
+    linhas = db(db.avaliacao_produto.produto.belongs(produto_ids)).select(
+        db.avaliacao_produto.produto, soma, quantidade,
+        groupby=db.avaliacao_produto.produto)
+    resultado = {}
+    for linha in linhas:
+        total_avaliacoes = int(linha[quantidade])
+        resultado[linha.avaliacao_produto.produto] = dict(
+            media=float(linha[soma]) / total_avaliacoes,
+            quantidade=total_avaliacoes)
+    return resultado
+
+
+def cliente_pode_avaliar(usuario_id, produto_id):
+    """Só permite avaliar um produto comprado e já entregue ao cliente."""
+    return bool(db((db.pedido.cliente == usuario_id) &
+                   (db.pedido.status == 'entregue') &
+                   (db.pedido_item.pedido == db.pedido.id) &
+                   (db.pedido_item.produto == produto_id)).count())
+
+
+def produto_para_json(p, avaliacao=None):
     """Dicionário serializável de um produto (usado pela API/React)."""
     return dict(id=p.id, codigo=p.codigo, nome=p.nome, descricao=p.descricao or '',
                 preco=float(p.preco), preco_fmt=moeda(p.preco), estoque=p.estoque,
-                prazo_dias=p.prazo_dias, ativo=bool(p.ativo),
+                prazo_dias=p.prazo_dias, ativo=bool(p.ativo), console=p.console or '',
+                estado=p.estado, avaliacao_media=(avaliacao or {}).get('media'),
+                avaliacao_quantidade=(avaliacao or {}).get('quantidade', 0),
                 categoria_id=p.categoria,
                 categoria=(p.categoria.nome if p.categoria else ''),
                 imagem=url_imagem(p, mini=True), imagem_grande=url_imagem(p, mini=False),
@@ -974,6 +1076,8 @@ ARQUIVOS['models/z_dados_iniciais.py'] = r'''# -*- coding: utf-8 -*-
 #  MODEL — carga inicial (executa uma única vez, quando não há grupos no banco)
 #  O prefixo "z_" garante que este arquivo rode depois de db.py e regras.py.
 # =============================================================================
+import re
+
 
 USUARIOS_DEMO = [
     # (papel,          nome,           e-mail,                senha)
@@ -985,161 +1089,183 @@ USUARIOS_DEMO = [
 
 # (código, nome, categoria, preço, estoque inicial, prazo em dias úteis, descrição)
 PRODUTOS_DEMO = [
-    ('PRD-10001', 'Resident Evil', 'Jogos', 3000.00, 40, 12,
-    'Jogo para PlayStation 1, Mídia Física, Original\n'
-    'Acompanha o manual\n'
-    'Estado: muito bom\n'),
-    ('PRD-10002', 'Crash Bandicoot', 'Jogos', 720.00, 0, 6,
-    'Jogo para PlayStation 1, Mídia Física, Original\n'
-    'Estado: bom\n'),
-    ('PRD-10003', 'GTA San Andreas', 'Jogos', 210.00, 2, 5,
-    'Jogo para PlayStation 2, Mídia Física, Original\n'
-    'Estado: usado\n'),
-    ('PRD-10004', 'Resident Evil 4', 'Jogos', 680.00, 1, 5,
+    ('PRD-10001', 'Resident Evil', 'Jogos', 3000.0, 40, 12,
+     'Jogo para PlayStation 1, Mídia Física, Original\n'
+     'Acompanha o manual\n'
+     'Estado: muito bom\n'),
+    ('PRD-10002', 'Crash Bandicoot', 'Jogos', 720.0, 0, 6,
+     'Jogo para PlayStation 1, Mídia Física, Original\n'
+     'Estado: bom\n'),
+    ('PRD-10003', 'GTA San Andreas', 'Jogos', 210.0, 2, 5,
      'Jogo para PlayStation 2, Mídia Física, Original\n'
-      'Estado: muito bom\n'),
-    ('PRD-10005', 'Spider-Man: Shattered Dimensions', 'Jogos', 1200.00, 1, 7,
+     'Estado: usado\n'),
+    ('PRD-10004', 'Resident Evil 4', 'Jogos', 680.0, 1, 5,
+     'Jogo para PlayStation 2, Mídia Física, Original\n'
+     'Estado: muito bom\n'),
+    ('PRD-10005', 'Spider-Man: Shattered Dimensions', 'Jogos', 1200.0, 1, 7,
      'Jogo para PlayStation 3, Mídia Física, Original\n'
-    'Estado: quase novo\n'),
+     'Estado: quase novo\n'),
     ('PRD-10006', 'Grand Theft Auto V', 'Jogos', 80, 4, 2,
      'Jogo para PlayStation 3, Mídia Física, Original\n'
-    'Acompanha mapa e guia do jogo\n'
-    'Estado: aceitável\n'),
-    ('PRD-10007', 'Ben 10: Protector of Earth', 'Jogos', 1010.10, 10, 10,
+     'Acompanha mapa e guia do jogo\n'
+     'Estado: aceitável\n'),
+    ('PRD-10007', 'Ben 10: Protector of Earth', 'Jogos', 1010.1, 10, 10,
      'Jogo para PSP, Mídia Física, Original\n'
      'Estado: muito bom\n'),
-    ('PRD-10008', 'God of War: Chains of Olympus', 'Jogos', 440.00, 2, 13,
+    ('PRD-10008', 'God of War: Chains of Olympus', 'Jogos', 440.0, 2, 13,
      'Jogo para PSP, Mídia Física, Original\n'
      'Acompanha manual\n'
-    'Estado: bom\n'),
-    ('PRD-10009', 'Persona 4 Golden', 'Jogos', 270.00, 1, 9,
+     'Estado: bom\n'),
+    ('PRD-10009', 'Persona 4 Golden', 'Jogos', 270.0, 1, 9,
      'Jogo para PS Vita, Mídia Física, Original\n'
      'Estado: muito bom\n'),
-    ('PRD-10010', 'Rayman Origins', 'Jogos', 90.00, 3, 9,
+    ('PRD-10010', 'Rayman Origins', 'Jogos', 90.0, 3, 9,
      'Jogo para PS Vita, Mídia Física, Original\n'
-      'Estado: aceitável\n'),
-    ('PRD-10011', 'Super Mario Bros.', 'Jogos', 40000.00, 1, 20,
-    'Jogo para NES, Mídia Física, Original\n'
-    'Estado: novo\n'),
-    ('PRD-10012', 'Castlevania', 'Jogos', 520.00, 1, 17,
+     'Estado: aceitável\n'),
+    ('PRD-10011', 'Super Mario Bros.', 'Jogos', 40000.0, 1, 20,
      'Jogo para NES, Mídia Física, Original\n'
-    'Acompanha caixa original e manual\n'
-    'Estado: bom\n'),
-    ('PRD-10013', 'Super Mario World', 'Jogos', 150.00, 4, 11,
-    'Jogo para Super Nintendo, Mídia Física, Original\n'
-    'Apenas cartucho, não acompanha caixa\n'
-    'Acompanha manual\n'
-    'Estado: razoável\n'),
-    ('PRD-10014', 'Donkey Kong Country', 'Jogos', 16200.00, 1, 25,
-    'Jogo para Super Nintendo, Mídia Física, Original\n'
-      'Acompanha cartucho e caixa originais\n'
-      'Estado: novo\n'),
-    ('PRD-10015', 'Tetris', 'Jogos', 200.00, 7, 6,
-    'Jogo para Game Boy, Mídia Física, Original\n'
-      'Não acompanha caixa, apenas o cartucho\n'
-      'Estado: muito bom\n'),
-    ('PRD-10016', 'Pokémon Red', 'Jogos', 2500.00, 1, 18,
-      'Jogo para Game Boy, Mídia Física, Original\n'
-      'Acompanha caixa, cartucho, berço, encartes e manual originais\n'
-      'Estado: bom\n'),
+     'Estado: novo\n'),
+    ('PRD-10012', 'Castlevania', 'Jogos', 520.0, 1, 17,
+     'Jogo para NES, Mídia Física, Original\n'
+     'Acompanha caixa original e manual\n'
+     'Estado: bom\n'),
+    ('PRD-10013', 'Super Mario World', 'Jogos', 150.0, 4, 11,
+     'Jogo para Super Nintendo, Mídia Física, Original\n'
+     'Apenas cartucho, não acompanha caixa\n'
+     'Acompanha manual\n'
+     'Estado: razoável\n'),
+    ('PRD-10014', 'Donkey Kong Country', 'Jogos', 16200.0, 1, 25,
+     'Jogo para Super Nintendo, Mídia Física, Original\n'
+     'Acompanha cartucho e caixa originais\n'
+     'Estado: novo\n'),
+    ('PRD-10015', 'Tetris', 'Jogos', 200.0, 7, 6,
+     'Jogo para Game Boy, Mídia Física, Original\n'
+     'Não acompanha caixa, apenas o cartucho\n'
+     'Estado: muito bom\n'),
+    ('PRD-10016', 'Pokémon Red', 'Jogos', 2500.0, 1, 18,
+     'Jogo para Game Boy, Mídia Física, Original\n'
+     'Acompanha caixa, cartucho, berço, encartes e manual originais\n'
+     'Estado: bom\n'),
     ('PRD-10017', 'Pokémon Gold', 'Jogos', 1700, 1, 11,
-      'Jogo para Game Boy Color, Mídia Física, Original\n'
-      'Acompanha caixa e cartucho originais\n'
-      'Estado: muito bom\n'),
+     'Jogo para Game Boy Color, Mídia Física, Original\n'
+     'Acompanha caixa e cartucho originais\n'
+     'Estado: muito bom\n'),
     ('PRD-10018', 'Legend Of Zelda - Link’s Awakening DX', 'Jogos', 1000, 0, 22,
-    'Acompanha caixa, cartucho e manuais originais\n'
-    'Estado: bom\n'),
-    ('PRD-10019', 'Metroid: Zero Mission', 'Jogos', 800.00, 1, 27,
-      'Jogo para Game Boy Advance, Mídia Física, Original, Versão japonesa\n'
-      'Acompanha caixa, manual, livretos, DVD/VHS e cartucho originais\n'
-      'Estado: muito bom\n'),
-    ('PRD-10020', 'Mother 1+2', 'Jogos', 610.00, 2, 12,
-      'Jogo para Game Boy Advance, Mídia Física, Original\n'
-      'Acompanha caixa, manual e cartucho originais\n'
-      'Estado: muito bom\n'),
-    ('PRD-10021', 'Lego Batman The Videogame', 'Jogos', 505.00, 1, 2,
-      'Jogo para Nintendo DS, Mídia Física, Original\n'
-      'Acompanha manual\n'
-      'Estado: como novo\n'),
-    ('PRD-10022', 'Rhythm Heaven', 'Jogos', 270.00, 1, 8,
-      'Jogo para Nintendo DS, Mídia Física, Original\n'
-      'Não acompanha manual\n'
-      'Estado: aceitável\n'),
+     'Acompanha caixa, cartucho e manuais originais\n'
+     'Estado: bom\n'),
+    ('PRD-10019', 'Metroid: Zero Mission', 'Jogos', 800.0, 1, 27,
+     'Jogo para Game Boy Advance, Mídia Física, Original, Versão japonesa\n'
+     'Acompanha caixa, manual, livretos, DVD/VHS e cartucho originais\n'
+     'Estado: muito bom\n'),
+    ('PRD-10020', 'Mother 1+2', 'Jogos', 610.0, 2, 12,
+     'Jogo para Game Boy Advance, Mídia Física, Original\n'
+     'Acompanha caixa, manual e cartucho originais\n'
+     'Estado: muito bom\n'),
+    ('PRD-10021', 'Lego Batman The Videogame', 'Jogos', 505.0, 1, 2,
+     'Jogo para Nintendo DS, Mídia Física, Original\n'
+     'Acompanha manual\n'
+     'Estado: como novo\n'),
+    ('PRD-10022', 'Rhythm Heaven', 'Jogos', 270.0, 1, 8,
+     'Jogo para Nintendo DS, Mídia Física, Original\n'
+     'Não acompanha manual\n'
+     'Estado: aceitável\n'),
     ('PRD-10023', 'Animal Crossing: New Leaf', 'Jogos', 279.99, 9, 21,
-    'Jogo para Nintendo 3DS, Mídia Física, Original\n'
-    'Estado: Muito Bom\n'),
+     'Jogo para Nintendo 3DS, Mídia Física, Original\n'
+     'Estado: Muito Bom\n'),
     ('PRD-10024', 'Super Mario 3D Land', 'Jogos', 219.99, 10, 7,
-      'Jogo para Nintendo 3DS, Mídia Física, Original\n'
-      'Estado: Aceitável\n'),
+     'Jogo para Nintendo 3DS, Mídia Física, Original\n'
+     'Estado: Aceitável\n'),
     ('PRD-10025', 'Super Mario 64', 'Jogos', 1100.99, 1, 30,
-    'Jogo para Nintendo 64, Mídia Física, Original\n'
-    'Estado: Semi Novo\n'),
+     'Jogo para Nintendo 64, Mídia Física, Original\n'
+     'Estado: Semi Novo\n'),
     ('PRD-10026', 'The Legend of Zelda: Ocarina of Time - Edição Colecionador', 'Jogos', 3049.99, 1, 30,
-    'Jogo para Nintendo 64, Mídia Física, Original\n'
-    'Estado: Semi Novo\n'),
+     'Jogo para Nintendo 64, Mídia Física, Original\n'
+     'Estado: Semi Novo\n'),
     ('PRD-10027', 'Metroid Prime', 'Jogos', 279.99, 2, 10,
-    'Jogo para Gamecube, Mídia Física, Original\n'
-    'Estado: Muito Bom\n'),
+     'Jogo para Gamecube, Mídia Física, Original\n'
+     'Estado: Muito Bom\n'),
     ('PRD-10028', 'Super Mario Sunshine', 'Jogos', 259.31, 4, 13,
-      'Jogo para Gamecube, Mídia Física, Original\n'
+     'Jogo para Gamecube, Mídia Física, Original\n'
      ' Estado: Aceitável\n'),
     ('PRD-10029', 'Punch Out', 'Jogos', 270.95, 3, 29,
-      'Jogo para Wii, Mídia Física, Original\n'
-      'Estado: Novo\n'),
+     'Jogo para Wii, Mídia Física, Original\n'
+     'Estado: Novo\n'),
     ('PRD-10030', 'Scooby Doo And The Spooky Swamp', 'Jogos', 1000.99, 1, 9,
-      'Jogo para Wii, Mídia Física, Original\n'
-      'Estado: Aceitável\n'),
+     'Jogo para Wii, Mídia Física, Original\n'
+     'Estado: Aceitável\n'),
     ('PRD-10031', 'Mario Kart 8', 'Jogos', 179.45, 4, 20,
-      'Jogo para Wii U, Mídia Física, Original\n'
-      'Estado: Novo\n'),
+     'Jogo para Wii U, Mídia Física, Original\n'
+     'Estado: Novo\n'),
     ('PRD-10032', 'Splatoon', 'Jogos', 150.77, 1, 13,
-      'Jogo para Wii U, Mídia Física, Original\n'
-      'Estado: Aceitável\n'),
-    ('PRD-10033', 'Alex Kidd in Miracle World', 'Jogos', 240.80, 3, 5,
-      'Jogo para Master System, Mídia Física, Original\n'
-      'Estado: Muito Bom\n'),
+     'Jogo para Wii U, Mídia Física, Original\n'
+     'Estado: Aceitável\n'),
+    ('PRD-10033', 'Alex Kidd in Miracle World', 'Jogos', 240.8, 3, 5,
+     'Jogo para Master System, Mídia Física, Original\n'
+     'Estado: Muito Bom\n'),
     ('PRD-10034', 'Castle of Illusion Starring Mickey Mouse', 'Jogos', 199.99, 1, 18,
-      'Jogo para Master System, Mídia Física, Original\n'
-      'Estado: Bom\n'),
-    ('PRD-10035', 'Sonic the Hedgehog.', 'Jogos', 780.00, 1, 30,
-    'Jogo para Sega Genesis, Mídia Física, Original\n'
-    'Estado: Aceitável\n'),
-    ('PRD-10036', 'Streets of Rage 2', 'Jogos', 695.00, 2, 11,
-      'Jogo para Sega Genesis, Mídia Física, Original\n'
-      'Estado: Muito Bom\n'),
-    ('PRD-10037', 'Crazy Taxi', 'Jogos', 595.00, 1, 29,
-    'Jogo para Dreamcast, Mídia Física, Original\n'
-    'Estado: Aceitável\n'),
+     'Jogo para Master System, Mídia Física, Original\n'
+     'Estado: Bom\n'),
+    ('PRD-10035', 'Sonic the Hedgehog.', 'Jogos', 780.0, 1, 30,
+     'Jogo para Sega Genesis, Mídia Física, Original\n'
+     'Estado: Aceitável\n'),
+    ('PRD-10036', 'Streets of Rage 2', 'Jogos', 695.0, 2, 11,
+     'Jogo para Sega Genesis, Mídia Física, Original\n'
+     'Estado: Muito Bom\n'),
+    ('PRD-10037', 'Crazy Taxi', 'Jogos', 595.0, 1, 29,
+     'Jogo para Dreamcast, Mídia Física, Original\n'
+     'Estado: Aceitável\n'),
     ('PRD-10038', 'Shenmue', 'Jogos', 490.99, 2, 20,
-    'Jogo para Dreamcast, Mídia Física, Original\n'
-    'Estado: Aceitável\n'),
-    ('PRD-10039', 'Fable', 'Jogos', 200.00, 2, 20,
-      'Jogo para XBOX, Mídia Física, Original\n'
-      'Estado: Aceitável\n'),
-    ('PRD-10040', 'Legacy of Kain: Defiance', 'Jogos', 230.00, 1, 20,
-      'Jogo para XBOX, Mídia Física, Original\n'
-      'Estado: Muito Bom\n'),
+     'Jogo para Dreamcast, Mídia Física, Original\n'
+     'Estado: Aceitável\n'),
+    ('PRD-10039', 'Fable', 'Jogos', 200.0, 2, 20,
+     'Jogo para XBOX, Mídia Física, Original\n'
+     'Estado: Aceitável\n'),
+    ('PRD-10040', 'Legacy of Kain: Defiance', 'Jogos', 230.0, 1, 20,
+     'Jogo para XBOX, Mídia Física, Original\n'
+     'Estado: Muito Bom\n'),
     ('PRD-10041', 'Gears of War', 'Jogos', 200, 5, 11,
-      'Jogo para XBOX, Mídia Física, Original\n'
-      'Estado: Muito bom\n'),
-    ('PRD-10042', 'Halo 3', 'Jogos', 185.00, 4, 3,
-    'Jogo para XBOX, Mídia Física, Original\n'
-    'Estado: Bom\n'),
-    ('PRD-10043', 'Grand Theft Auto IV', 'Jogos', 280.00, 1, 14,
-      'Jogo para XBOX 360, Mídia Física, Original\n' 
-      'Estado: Novo\n'),
-    ('PRD-10044', 'Grand Theft Auto V', 'Jogos', 280.00, 15, 15,
-      'Jogo para XBOX 360, Mídia Física, Original\n'
-      'Estado: Semi Novo\n'),
-    ('PRD-10045', 'E.T. the Extra-Terrestrial', 'Jogos', 1500.00, 2, 12,
-      'Jogo para Atari 2600, Mídia Física, Original, Lacrado\n'
-      'Acompanha caixa e cartucho originais\n'
-      'Estado: muito bom\n'),
-    ('PRD-10046', 'Pac-Man', 'Jogos', 450.00, 1, 24,
-      'Jogo para Atari 2600, Mídia Física, Original\n'
-      'Acompanha caixa, cartucho e manual originais\n'
-      'Estado: razoável\n'),
+     'Jogo para XBOX, Mídia Física, Original\n'
+     'Estado: Muito bom\n'),
+    ('PRD-10042', 'Halo 3', 'Jogos', 185.0, 4, 3,
+     'Jogo para XBOX, Mídia Física, Original\n'
+     'Estado: Bom\n'),
+    ('PRD-10043', 'Grand Theft Auto IV', 'Jogos', 280.0, 1, 14,
+     'Jogo para XBOX 360, Mídia Física, Original\n'
+     'Estado: Novo\n'),
+    ('PRD-10044', 'Grand Theft Auto V', 'Jogos', 280.0, 15, 15,
+     'Jogo para XBOX 360, Mídia Física, Original\n'
+     'Estado: Semi Novo\n'),
+    ('PRD-10045', 'E.T. the Extra-Terrestrial', 'Jogos', 1500.0, 2, 12,
+     'Jogo para Atari 2600, Mídia Física, Original, Lacrado\n'
+     'Acompanha caixa e cartucho originais\n'
+     'Estado: muito bom\n'),
+    ('PRD-10046', 'Pac-Man', 'Jogos', 450.0, 1, 24,
+     'Jogo para Atari 2600, Mídia Física, Original\n'
+     'Acompanha caixa, cartucho e manual originais\n'
+     'Estado: razoável\n'),
 ]
+
+
+def plataforma_jogo(codigo, descricao):
+    match = re.search(r'Jogo para ([^,\n]+)', descricao, re.IGNORECASE)
+    plataforma = match.group(1).strip() if match else (
+        'Game Boy Color' if codigo == 'PRD-10018' else '')
+    return {'Gamecube': 'GameCube', 'XBOX': 'Xbox', 'XBOX 360': 'Xbox 360'}.get(
+        plataforma, plataforma)
+
+
+def estado_jogo(descricao):
+    match = re.search(r'Estado:\s*([^\n]+)', descricao, re.IGNORECASE)
+    estado = match.group(1).strip().lower() if match else 'bom'
+    if estado in ('novo', 'lacrado'):
+        return 'Novo'
+    if estado in ('como novo', 'quase novo', 'semi novo'):
+        return 'Como novo'
+    if estado == 'muito bom':
+        return 'Muito bom'
+    if estado in ('aceit?vel', 'razo?vel'):
+        return 'Aceit?vel'
+    return 'Bom'
 
 
 def carga_inicial():
@@ -1159,18 +1285,16 @@ def carga_inicial():
     auth.add_membership(grupos['vendedor'], usuarios['administrador'])
 
     categorias = {}
-    for nome, desc in [('Consoles', 'Videogames clássicos e retrô de diferentes gerações e fabricantes.'),
-                       ('Acessórios', 'Cabos, adaptadores, fontes e acessórios para consoles antigos.'),
-                       ('Jogos', 'Jogos físicos clássicos, incluindo cartuchos e mídias em disco.'),
-                       ('Controles', 'Controles originais e compatíveis para videogames clássicos e retrô.')]:
-        categorias[nome] = db.categoria.insert(nome=nome, descricao=desc)
+    nome, desc = ('Jogos', 'Jogos clássicos e colecionáveis para consoles de várias gerações.')
+    categorias[nome] = db.categoria.insert(nome=nome, descricao=desc)
 
     for codigo, nome, cat, preco, estoque, prazo, desc in PRODUTOS_DEMO:
         imagem = codigo + '.jpg'
         if not os.path.exists(caminho_imagem(imagem)):
             imagem = ''
         pid = db.produto.insert(codigo=codigo, nome=nome, descricao=desc,
-                                categoria=categorias[cat], preco=preco, estoque=0,
+                                categoria=categorias[cat], console=plataforma_jogo(codigo, desc),
+                                estado=estado_jogo(desc), preco=preco, estoque=0,
                                 prazo_dias=prazo, imagem=imagem, ativo=True,
                                 vendedor=usuarios['vendedor'])
         if estoque:
@@ -1340,6 +1464,7 @@ ARQUIVOS['controllers/api.py'] = r'''# -*- coding: utf-8 -*-
 #  (o token é o mesmo dos formulários; ver static/js/loja.js -> LojaAPI).
 # =============================================================================
 import json
+from decimal import Decimal, InvalidOperation
 
 
 def _json(dados, status=200):
@@ -1360,6 +1485,18 @@ def _erro(mensagem, status=400):
     return _json(dict(ok=False, erro=mensagem), status)
 
 
+def _preco_filtro(valor, rotulo):
+    if not valor:
+        return None
+    try:
+        preco = Decimal(str(valor).strip().replace(',', '.'))
+    except InvalidOperation:
+        raise ValueError('%s inválido.' % rotulo)
+    if not preco.is_finite() or preco < 0 or preco > 999999:
+        raise ValueError('%s inválido.' % rotulo)
+    return preco
+
+
 def _exigir(*papeis):
     """Login + papel + POST seguro (para chamadas que alteram dados)."""
     if not auth.user:
@@ -1375,18 +1512,62 @@ def _exigir(*papeis):
 #  Catálogo (público)
 # -----------------------------------------------------------------------------
 def produtos():
-    """GET api/produtos?q=texto&categoria=id  -> lista para o <Catalogo/>."""
+    """GET api/produtos -> catálogo com filtros avançados para o <Catalogo/>."""
     query = db.produto.ativo == True
     q = (request.vars.q or '').strip()
     if q:
         padrao = '%' + q + '%'
         query &= (db.produto.nome.ilike(padrao) | db.produto.descricao.ilike(padrao) |
                   db.produto.codigo.ilike(padrao))
-    if request.vars.categoria:
-        query &= db.produto.categoria == request.vars.categoria
-    lista = [produto_para_json(p) for p in db(query).select(orderby=db.produto.nome)]
+    categoria = request.vars.categoria or ''
+    if categoria:
+        try:
+            categoria_id = int(categoria)
+        except (ValueError, TypeError):
+            return _erro('Categoria inválida.')
+        if not db.categoria[categoria_id]:
+            return _erro('Categoria inválida.')
+        query &= db.produto.categoria == categoria_id
+    console = request.vars.console or ''
+    if console == 'sem_console':
+        query &= ((db.produto.console == '') | (db.produto.console == None))
+    elif console:
+        if console not in CONSOLES:
+            return _erro('Console inválido.')
+        query &= db.produto.console == console
+    estado = request.vars.estado or ''
+    if estado:
+        if estado not in ESTADOS_PRODUTO:
+            return _erro('Estado inválido.')
+        query &= db.produto.estado == estado
+    try:
+        preco_min = _preco_filtro(request.vars.preco_min, 'Preço mínimo')
+        preco_max = _preco_filtro(request.vars.preco_max, 'Preço máximo')
+    except ValueError as e:
+        return _erro(str(e))
+    if preco_min is not None and preco_max is not None and preco_min > preco_max:
+        return _erro('O preço mínimo não pode ser maior que o preço máximo.')
+    if preco_min is not None:
+        query &= db.produto.preco >= preco_min
+    if preco_max is not None:
+        query &= db.produto.preco <= preco_max
+    avaliacao_minima = request.vars.avaliacao_minima or ''
+    if avaliacao_minima:
+        try:
+            avaliacao_minima = int(avaliacao_minima)
+        except (ValueError, TypeError):
+            return _erro('Avaliação mínima inválida.')
+        if not 1 <= avaliacao_minima <= 5:
+            return _erro('Avaliação mínima deve estar entre 1 e 5.')
+    produtos_filtrados = db(query).select(orderby=db.produto.nome)
+    avaliacoes = resumo_avaliacoes([p.id for p in produtos_filtrados])
+    if avaliacao_minima:
+        produtos_filtrados = [p for p in produtos_filtrados
+                              if avaliacoes.get(p.id, {}).get('media', 0) >= avaliacao_minima]
+    lista = [produto_para_json(p, avaliacoes.get(p.id)) for p in produtos_filtrados]
     categorias = [dict(id=c.id, nome=c.nome) for c in db(db.categoria).select(orderby=db.categoria.nome)]
     return _json(dict(ok=True, produtos=lista, categorias=categorias,
+                      consoles=CONSOLES, estados=ESTADOS_PRODUTO,
                       logado=bool(auth.user), pode_comprar=tem_papel('cliente'),
                       no_carrinho=quantidade_carrinho(auth.user_id)))
 
@@ -1553,6 +1734,67 @@ def adicionar():
 
 
 @requer_papel('cliente')
+def avaliar_produto():
+    """Cria ou atualiza a avaliação de um produto já entregue ao cliente."""
+    exigir_post_seguro()
+    produto_id = request.args(0, cast=int) if request.args else None
+    p = db.produto[produto_id] if produto_id else None
+    try:
+        nota = int(request.vars.nota or '')
+    except (ValueError, TypeError):
+        nota = 0
+    if not p or not cliente_pode_avaliar(auth.user_id, produto_id):
+        avisar('erro', 'Só é possível avaliar produtos de pedidos já entregues.')
+    elif not 1 <= nota <= 5:
+        avisar('erro', 'Selecione uma nota entre 1 e 5 estrelas.')
+    else:
+        existente = db((db.avaliacao_produto.produto == produto_id) &
+                       (db.avaliacao_produto.cliente == auth.user_id)).select().first()
+        if existente:
+            existente.update_record(nota=nota, atualizado_em=request.now)
+            avisar('ok', 'Sua avaliação foi atualizada.')
+        else:
+            db.avaliacao_produto.insert(produto=produto_id, cliente=auth.user_id,
+                                        nota=nota,
+                                        chave='%s:%s' % (auth.user_id, produto_id))
+            avisar('ok', 'Obrigado por avaliar este produto!')
+    redirect(URL('default', 'produto', args=[produto_id] if p else []))
+
+
+@requer_papel('cliente')
+def desejo_adicionar():
+    """Adiciona o produto da página de detalhes à lista de desejos."""
+    exigir_post_seguro()
+    produto_id = request.args(0, cast=int) if request.args else None
+    try:
+        produto, criado = adicionar_lista_desejo(auth.user_id, produto_id)
+        avisar('ok' if criado else 'info',
+               ('"%s" adicionado à sua lista de desejos.' if criado else
+                '"%s" já está na sua lista de desejos.') % produto.nome)
+    except (ErroDeNegocio, ValueError, TypeError) as e:
+        avisar('erro', str(e) or 'Não foi possível adicionar o produto.')
+    redirect(URL('default', 'produto', args=[produto_id]))
+
+
+@requer_papel('cliente')
+def desejo_remover():
+    """Remove um produto da lista do cliente autenticado."""
+    exigir_post_seguro()
+    produto_id = request.args(0, cast=int) if request.args else None
+    removidos = remover_lista_desejo(auth.user_id, produto_id)
+    avisar('info' if removidos else 'erro',
+           'Produto removido da sua lista de desejos.' if removidos else
+           'Produto não encontrado na sua lista de desejos.')
+    redirect(URL('lista_desejo'))
+
+
+@requer_papel('cliente')
+def lista_desejo():
+    """Exibe apenas os produtos salvos pelo cliente autenticado."""
+    return dict(itens=itens_lista_desejo(auth.user_id))
+
+
+@requer_papel('cliente')
 def checkout():
     """Fecha o pedido a partir do carrinho (POST clássico; a versão React usa
     api/carrinho_finalizar) e redireciona para a tela do PIX."""
@@ -1684,35 +1926,31 @@ def index():
     categorias = db(db.categoria).select(orderby=db.categoria.nome)
     return dict(categorias=categorias, busca=request.vars.q or '')
 
+
 def produto():
-    """Detalhe de um produto com galeria de imagens."""
+    """Detalhe de um produto (view clássica renderizada no servidor)."""
     p = db.produto(request.args(0, cast=int)) if request.args else None
-    if not p or (not p.ativo and not tem_papel('vendedor', 'operador', 'administrador')):
+    pode_revisar = bool(p and tem_papel('cliente') and
+                        cliente_pode_avaliar(auth.user_id, p.id))
+    if not p or (not p.ativo and not pode_revisar and
+                 not tem_papel('vendedor', 'operador', 'administrador')):
         avisar('erro', 'Produto não encontrado.')
         redirect(URL('index'))
+    avaliacao = resumo_avaliacoes([p.id]).get(p.id, {})
+    minha_avaliacao = (db((db.avaliacao_produto.produto == p.id) &
+                          (db.avaliacao_produto.cliente == auth.user_id)
+                          ).select().first() if tem_papel('cliente') else None)
+    return dict(p=p, no_carrinho=quantidade_carrinho(auth.user_id),
+                avaliacao=avaliacao, minha_avaliacao=minha_avaliacao,
+                pode_avaliar=pode_revisar,
+                na_lista_desejo=(produto_na_lista_desejo(auth.user_id, p.id)
+                                 if tem_papel('cliente') else False))
 
-    # Lista de imagens do produto
-    galeria = []
-
-    # Imagem principal cadastrada no banco
-    if p.imagem and os.path.isfile(caminho_imagem(p.imagem)):
-        galeria.append(p.imagem)
-
-    # Imagens adicionais: PRD-10001_2.jpg, PRD-10001_3.jpg etc.
-    numero = 2
-    while numero <= 20:
-        nome_imagem = '{}_{}.jpg'.format(p.codigo, numero)
-        if os.path.isfile(caminho_imagem(nome_imagem)):
-            galeria.append(nome_imagem)
-        numero += 1
-    return dict(
-        p=p,
-        galeria=galeria,
-        no_carrinho=quantidade_carrinho(auth.user_id))    
 
 def sobre():
     """Página que explica a arquitetura do projeto (material de aula)."""
     return dict()
+
 
 def imagem():
     """Serve as imagens dos produtos, que ficam em <RAIZ>/imagens/ (ao lado do .py),
@@ -1730,6 +1968,13 @@ def imagem():
 # -----------------------------------------------------------------------------
 #  Autenticação — formulários próprios usando o Auth do web2py por baixo
 # -----------------------------------------------------------------------------
+def user():
+    """Expõe somente a action Auth usada pelo link de redefinição de senha."""
+    if not request.args or request.args(0) != 'reset_password':
+        raise HTTP(404, 'Ação de autenticação não encontrada.')
+    return dict(form=auth())
+
+
 def login():
     if auth.user:
         redirect(pagina_inicial_do_papel())
@@ -1747,6 +1992,31 @@ def login():
             redirect(destino)
         erro = 'E-mail ou senha incorretos.'
     return dict(erro=erro, email=request.vars.email or '')
+
+
+def recuperar_senha():
+    email = (request.vars.email or '').strip().lower()
+    erro = ''
+    mensagem = ''
+    if request.env.request_method == 'POST':
+        exigir_post_seguro()
+        if IS_EMAIL()(email)[1] is not None:
+            erro = 'Informe um e-mail válido.'
+        else:
+            usuario = db(db.auth_user.email == email).select().first()
+            if not usuario:
+                erro = 'Nenhum e-mail foi encontrado com esse endereço.'
+            elif (not auth.settings.mailer or
+                  not auth.settings.mailer.settings.server or
+                  not auth.settings.mailer.settings.sender or
+                  str(auth.settings.mailer.settings.server).lower() == 'logging'):
+                erro = ('Encontramos a conta, mas o envio de e-mail não está configurado. '
+                        'Entre em contato com o administrador da loja.')
+            elif auth.email_reset_password(usuario):
+                mensagem = 'Um e-mail para alterar sua senha foi enviado.'
+            else:
+                erro = 'Encontramos a conta, mas não foi possível enviar o e-mail.'
+    return dict(erro=erro, email=email, mensagem=mensagem)
 
 
 def registrar():
@@ -2004,6 +2274,7 @@ def _ler_formulario_produto(p=None):
     # começa com os textos digitados (para reexibir o formulário em caso de erro)
     dados = dict(nome=(v.nome or '').strip(), descricao=(v.descricao or '').strip(),
                  categoria=v.categoria or None, ativo=bool(v.ativo),
+                 console=v.console or '', estado=v.estado or '',
                  preco=(v.preco or '').strip(), prazo_dias=(v.prazo_dias or '').strip(),
                  estoque_inicial=(v.estoque_inicial or '0').strip())
     erros = {}
@@ -2030,6 +2301,10 @@ def _ler_formulario_produto(p=None):
             erros['estoque_inicial'] = 'Estoque inicial inválido.'
     if dados['categoria'] and not db.categoria(dados['categoria']):
         erros['categoria'] = 'Categoria inválida.'
+    if dados['console'] not in [''] + CONSOLES:
+        erros['console'] = 'Console inválido.'
+    if dados['estado'] not in ESTADOS_PRODUTO:
+        erros['estado'] = 'Selecione um estado válido.'
     return dados, erros
 
 
@@ -2044,8 +2319,8 @@ def novo():
     """Cadastro de produto com upload da imagem (multipart/form-data)."""
     response.view = 'vendedor/form.html'
     categorias = db(db.categoria).select(orderby=db.categoria.nome)
-    dados, erros = dict(nome='', descricao='', categoria=None, preco='', prazo_dias=5,
-                        estoque_inicial=0, ativo=True), {}
+    dados, erros = dict(nome='', descricao='', categoria=None, console='', estado='Novo',
+                        preco='', prazo_dias=5, estoque_inicial=0, ativo=True), {}
     if request.env.request_method == 'POST':
         exigir_post_seguro()
         dados, erros = _ler_formulario_produto()
@@ -2053,6 +2328,7 @@ def novo():
         if not erros:
             pid = db.produto.insert(codigo=gerar_codigo_produto(), nome=dados['nome'],
                                     descricao=dados['descricao'], categoria=dados['categoria'],
+                                    console=dados['console'], estado=dados['estado'],
                                     preco=dados['preco'], estoque=0,
                                     prazo_dias=dados['prazo_dias'], ativo=dados['ativo'],
                                     vendedor=auth.user_id)
@@ -2070,7 +2346,8 @@ def novo():
                     redirect(URL('editar', args=[pid]))
             avisar('ok', 'Produto %s cadastrado.' % p.codigo)
             redirect(URL('index'))
-    return dict(p=None, dados=dados, erros=erros, categorias=categorias)
+    return dict(p=None, dados=dados, erros=erros, categorias=categorias,
+                consoles=CONSOLES, estados=ESTADOS_PRODUTO)
 
 
 @requer_papel('vendedor')
@@ -2079,6 +2356,7 @@ def editar():
     p = _meu_produto()
     categorias = db(db.categoria).select(orderby=db.categoria.nome)
     dados = dict(nome=p.nome, descricao=p.descricao, categoria=p.categoria,
+                 console=p.console or '', estado=p.estado,
                  preco=('%.2f' % p.preco).replace('.', ','), prazo_dias=p.prazo_dias,
                  ativo=p.ativo)
     erros = {}
@@ -2087,7 +2365,8 @@ def editar():
         dados, erros = _ler_formulario_produto(p)
         if not erros:
             p.update_record(nome=dados['nome'], descricao=dados['descricao'],
-                            categoria=dados['categoria'], preco=dados['preco'],
+                            categoria=dados['categoria'], console=dados['console'],
+                            estado=dados['estado'], preco=dados['preco'],
                             prazo_dias=dados['prazo_dias'], ativo=dados['ativo'])
             if request.vars.remover_imagem:
                 remover_imagem_produto(p)
@@ -2103,7 +2382,8 @@ def editar():
                 redirect(URL('index'))
             avisar('ok', 'Produto %s atualizado.' % p.codigo)
             redirect(URL('index'))
-    return dict(p=p, dados=dados, erros=erros, categorias=categorias)
+    return dict(p=p, dados=dados, erros=erros, categorias=categorias,
+                consoles=CONSOLES, estados=ESTADOS_PRODUTO)
 
 
 @requer_papel('vendedor')
@@ -2437,7 +2717,7 @@ indice = dict((s, i) for i, (s, _) in enumerate(etapas)).get(pedido.status, -1)}
         <thead><tr><th>Produto</th><th class="num">Qtd</th><th class="num">Subtotal</th></tr></thead>
         <tbody>
         {{for i in itens:}}
-          <tr><td>{{=i.nome_produto}} <span class="mono pequeno texto-3">{{=i.codigo_produto}}</span></td><td class="num">{{=i.quantidade}} × {{=moeda(i.preco_unitario)}}</td><td class="num">{{=moeda(i.subtotal)}}</td></tr>
+          <tr><td>{{if i.produto:}}<a href="{{=URL('default', 'produto', args=[i.produto])}}">{{=i.nome_produto}}</a>{{else:}}{{=i.nome_produto}}{{pass}} <span class="mono pequeno texto-3">{{=i.codigo_produto}}</span>{{if pedido.status == 'entregue' and i.produto:}}<br><a class="pequeno" href="{{=URL('default', 'produto', args=[i.produto])}}">Avaliar produto</a>{{pass}}</td><td class="num">{{=i.quantidade}} × {{=moeda(i.preco_unitario)}}</td><td class="num">{{=moeda(i.subtotal)}}</td></tr>
         {{pass}}
           <tr><td colspan="2"><strong>Total</strong></td><td class="num"><strong>{{=moeda(pedido.total)}}</strong></td></tr>
         </tbody>
@@ -2478,6 +2758,44 @@ ARQUIVOS['views/cliente/pedidos.html'] = r'''{{extend 'layout.html'}}
     {{pass}}
     </tbody>
   </table>
+</div>
+{{pass}}
+'''
+
+# ---- views/cliente/lista_desejo.html --------------------------------------
+ARQUIVOS['views/cliente/lista_desejo.html'] = r'''{{extend 'layout.html'}}
+{{response.title = 'Lista de desejos'}}
+<div class="cabecalho-pagina">
+  <div><h1>Minha lista de desejos</h1><p>Produtos que você salvou para consultar depois.</p></div>
+  <a class="btn btn-secundario" href="{{=URL('default', 'index')}}">Voltar ao catálogo</a>
+</div>
+{{if not itens:}}
+<div class="cartao vazio-caixa">
+  <p>Sua lista de desejos está vazia.</p>
+  <a class="btn btn-primario" href="{{=URL('default', 'index')}}">Explorar produtos</a>
+</div>
+{{else:}}
+<div class="grade-produtos">
+  {{for linha in itens:}}
+    {{p = linha.produto}}
+    <article class="produto-card">
+      <a class="foto" href="{{=URL('default', 'produto', args=[p.id])}}">
+        <img src="{{=url_imagem(p)}}" alt="{{=p.nome}}" loading="lazy">
+      </a>
+      <div class="corpo">
+        <span class="categoria">{{=p.codigo}}</span>
+        <a class="nome" href="{{=URL('default', 'produto', args=[p.id])}}">{{=p.nome}}</a>
+        <span class="preco">{{=moeda(p.preco)}}</span>
+        {{if not p.ativo:}}<span class="estoque-info zerado">Produto indisponível</span>{{pass}}
+      </div>
+      <div class="comprar">
+        <form method="post" action="{{=URL('cliente', 'desejo_remover', args=[p.id])}}">
+          <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+          <button class="btn btn-secundario btn-largo" type="submit">Remover da lista</button>
+        </form>
+      </div>
+    </article>
+  {{pass}}
 </div>
 {{pass}}
 '''
@@ -2585,11 +2903,11 @@ ARQUIVOS['views/cliente/reclamacao.html'] = r'''{{extend 'layout.html'}}
 
 # ---- views/default/index.html ----------------------------------------------
 ARQUIVOS['views/default/index.html'] = r'''{{extend 'layout.html'}}
-{{response.title = 'Catálogo'}}
+{{response.title = 'Jogos clássicos'}}
 <div class="cabecalho-pagina">
   <div>
-    <h1>Catálogo</h1>
-    <p>Busque, escolha a quantidade e adicione ao carrinho. A lista abaixo é montada pelo React a partir da API JSON da loja.</p>
+    <h1>Jogos clássicos</h1>
+    <p>Explore jogos físicos e colecionáveis. Filtre por console, preço, categoria, avaliação e estado.</p>
   </div>
 </div>
 
@@ -2639,6 +2957,9 @@ ARQUIVOS['views/default/login.html'] = r'''{{extend 'layout.html'}}
       <a class="btn btn-secundario" href="{{=URL('default', 'registrar')}}">Criar conta</a>
     </div>
   </form>
+  <div class="aviso aviso-info" style="margin-top:1rem">
+    <a href="{{=URL('default', 'recuperar_senha')}}">esqueceu a senha?</a>
+  </div>
   <details class="mt-1 pequeno texto-2">
     <summary>Contas de demonstração</summary>
     <ul class="lista-simples mt-1">
@@ -2648,6 +2969,38 @@ ARQUIVOS['views/default/login.html'] = r'''{{extend 'layout.html'}}
       <li>cliente@loja.com / cliente123 — cliente</li>
     </ul>
   </details>
+</div>
+'''
+
+# ---- views/default/recuperar_senha.html ------------------------------------
+ARQUIVOS['views/default/recuperar_senha.html'] = r'''{{extend 'layout.html'}}
+{{response.title = 'Recuperar senha'}}
+<div class="cartao cartao-estreito" style="margin:0 auto">
+  <h1>Recuperar senha</h1>
+  <p class="texto-2">Informe o e-mail cadastrado para receber o link de alteração da senha.</p>
+  {{if erro:}}<div class="aviso aviso-erro" style="margin:0 0 1rem">{{=erro}}</div>{{pass}}
+  {{if mensagem:}}<div class="aviso aviso-info" style="margin:0 0 1rem">{{=mensagem}}</div>{{pass}}
+  <form method="post" action="{{=URL('default', 'recuperar_senha')}}">
+    <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+    <div class="campo">
+      <label for="email">E-mail</label>
+      <input id="email" type="email" name="email" value="{{=email}}" required autofocus autocomplete="email">
+    </div>
+    <div class="formulario-acoes">
+      <button class="btn btn-primario" type="submit">Solicitar recuperação</button>
+      <a class="btn btn-secundario" href="{{=URL('default', 'login')}}">Voltar ao login</a>
+    </div>
+  </form>
+</div>
+'''
+
+# ---- views/default/user.html -----------------------------------------------
+ARQUIVOS['views/default/user.html'] = r'''{{extend 'layout.html'}}
+{{response.title = 'Redefinir senha'}}
+<div class="cartao cartao-estreito" style="margin:0 auto">
+  <h1>Redefinir senha</h1>
+  <p class="texto-2">Escolha uma nova senha para sua conta.</p>
+  {{=form}}
 </div>
 '''
 
@@ -2689,219 +3042,72 @@ ARQUIVOS['views/default/perfil.html'] = r'''{{extend 'layout.html'}}
 # ---- views/default/produto.html --------------------------------------------
 ARQUIVOS['views/default/produto.html'] = r'''{{extend 'layout.html'}}
 {{response.title = p.nome}}
-
-<p class="pequeno">
-  <a href="{{=URL('default', 'index')}}">Catálogo</a>
-  › {{=p.categoria.nome if p.categoria else 'Sem categoria'}}
-</p>
-
+<p class="pequeno"><a href="{{=URL('default', 'index')}}">Catálogo</a> › {{=p.categoria.nome if p.categoria else 'Sem categoria'}}</p>
 <div class="detalhe">
-
-  <!-- GALERIA DE IMAGENS -->
-  <div class="galeria-produto">
-
-    <div class="foto-grande">
-      <img
-        id="imagem-principal"
-        src="{{=URL('default', 'imagem', args=[galeria[0]]) if galeria else url_imagem(p, mini=False)}}"
-        alt="{{=p.nome}}"
-      >
-    </div>
-
-    {{if len(galeria) > 1:}}
-    <div class="galeria-miniaturas">
-
-      {{for indice, imagem in enumerate(galeria):}}
-      <button
-        type="button"
-        class="miniatura-galeria{{=' selecionada' if indice == 0 else ''}}"
-        data-imagem="{{=URL('default', 'imagem', args=[imagem])}}"
-        aria-label="Visualizar imagem {{=indice + 1}} de {{=p.nome}}"
-        aria-pressed="{{='true' if indice == 0 else 'false'}}"
-      >
-        <img
-          src="{{=URL('default', 'imagem', args=[imagem])}}"
-          alt="Miniatura {{=indice + 1}}"
-          loading="lazy"
-        >
-      </button>
-      {{pass}}
-
-    </div>
-    {{pass}}
-
-  </div>
-
-  <!-- INFORMAÇÕES DO PRODUTO -->
+  <div class="foto-grande"><img src="{{=url_imagem(p, mini=False)}}" alt="{{=p.nome}}"></div>
   <div class="cartao">
-
     <h1>{{=p.nome}}</h1>
-
-    <p class="texto-3 mono pequeno">
-      {{=p.codigo}}
-      {{if not p.ativo:}}
-        · <span class="etiqueta inativo">fora do catálogo</span>
-      {{pass}}
-    </p>
-
-    <p class="preco" style="font-size:1.8rem">
-      {{=moeda(p.preco)}}
-    </p>
-
-    <p class="descricao-produto">{{=p.descricao or 'Sem descrição.'}}</p>
-
+    <p class="texto-3 mono pequeno">{{=p.codigo}}{{if not p.ativo:}} · <span class="etiqueta inativo">fora do catálogo</span>{{pass}}</p>
+    <p class="preco" style="font-size:1.8rem">{{=moeda(p.preco)}}</p>
+    <p>{{=p.descricao or 'Sem descrição.'}}</p>
+    <p><strong>Estado:</strong> {{=p.estado}}</p>
+    {{if p.console:}}<p><strong>Console:</strong> {{=p.console}}</p>{{pass}}
+    <p class="avaliacao">{{if avaliacao:}}★ {{='%.1f' % avaliacao['media']}} / 5 · {{=avaliacao['quantidade']}} avaliação(ões){{else:}}Ainda sem avaliações{{pass}}</p>
     <dl class="definicoes">
-      <dt>Entrega</dt>
-      <dd>em até {{=p.prazo_dias}} dias úteis</dd>
-
+      <dt>Entrega</dt><dd>em até {{=p.prazo_dias}} dias úteis</dd>
       <dt>Estoque</dt>
-      <dd>
-        {{if p.estoque == 0:}}
-          <span class="estoque-info zerado">Esgotado</span>
-        {{elif p.estoque <= 5:}}
-          <span class="estoque-info baixo">
-            Só {{=p.estoque}} unidade(s)
-          </span>
-        {{else:}}
-          {{=p.estoque}} unidades
-        {{pass}}
-      </dd>
-
-      <dt>Vendido por</dt>
-      <dd>
-        {{=nome_usuario(p.vendedor) if p.vendedor else NOME_LOJA}}
-      </dd>
+      <dd>{{if p.estoque == 0:}}<span class="estoque-info zerado">Esgotado</span>
+          {{elif p.estoque <= 5:}}<span class="estoque-info baixo">Só {{=p.estoque}} unidade(s)</span>
+          {{else:}}{{=p.estoque}} unidades{{pass}}</dd>
+      <dt>Vendido por</dt><dd>{{=nome_usuario(p.vendedor) if p.vendedor else NOME_LOJA}}</dd>
     </dl>
-
     <div class="mt-1">
-
-      {{if tem_papel('cliente'):}}
-
-        {{if p.estoque > 0 and p.ativo:}}
-        <form
-          method="post"
-          action="{{=URL('cliente', 'adicionar', args=[p.id])}}"
-          class="acoes"
-          id="form-adicionar"
-        >
-          <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
-
-          <label for="qtd" class="pequeno">Quantidade</label>
-
-          <input
-            id="qtd"
-            type="number"
-            name="quantidade"
-            value="1"
-            min="1"
-            max="{{=p.estoque}}"
-            style="width:6rem"
-          >
-
-          <button class="btn btn-primario" type="submit">
-            Adicionar ao carrinho
-          </button>
-        </form>
-
-        {{else:}}
-          <button class="btn btn-primario" disabled>
-            Esgotado
-          </button>
-        {{pass}}
-
-      {{elif not auth.user:}}
-        <a
-          class="btn btn-secundario"
-          href="{{=URL('default', 'login')}}"
-        >
-          Entre para comprar
-        </a>
+    {{if pode_avaliar:}}
+    <form method="post" action="{{=URL('cliente', 'avaliar_produto', args=[p.id])}}" class="cartao mt-1">
+      <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+      <label for="nota">{{='Atualize sua avaliação' if minha_avaliacao else 'Avalie este produto'}}</label>
+      <div class="acoes mt-1">
+        <select id="nota" name="nota" required>
+          <option value="">Escolha uma nota</option>
+          {{for nota in range(5, 0, -1):}}<option value="{{=nota}}" {{='selected' if minha_avaliacao and minha_avaliacao.nota == nota else ''}}>{{=nota}} {{='estrela' if nota == 1 else 'estrelas'}}</option>{{pass}}
+        </select>
+        <button class="btn btn-secundario" type="submit">Enviar avaliação</button>
+      </div>
+    </form>
+    {{elif tem_papel('cliente'):}}
+    <p class="pequeno texto-2 mt-1">Você poderá avaliar após a entrega de um pedido com este produto.</p>
+    {{pass}}
+    {{if tem_papel('cliente'):}}
+      {{if p.estoque > 0 and p.ativo:}}
+      <form method="post" action="{{=URL('cliente', 'adicionar', args=[p.id])}}" class="acoes" id="form-adicionar">
+        <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+        <label for="qtd" class="pequeno">Quantidade</label>
+        <input id="qtd" type="number" name="quantidade" value="1" min="1" max="{{=p.estoque}}" style="width:6rem">
+        <button class="btn btn-primario" type="submit">Adicionar ao carrinho</button>
+      </form>
+      <form method="post" action="{{=URL('cliente', 'desejo_adicionar', args=[p.id])}}" class="mt-1">
+        <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+        <button class="btn btn-secundario" type="submit" {{if na_lista_desejo:}}disabled{{pass}}>
+          {{='Adicionar à lista de desejos' if not na_lista_desejo else 'Já está na lista de desejos'}}
+        </button>
+      </form>
+      {{else:}}
+      <button class="btn btn-primario" disabled>Esgotado</button>
+      <form method="post" action="{{=URL('cliente', 'desejo_adicionar', args=[p.id])}}" class="mt-1">
+        <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+        <button class="btn btn-secundario" type="submit" {{if na_lista_desejo:}}disabled{{pass}}>
+          {{='Adicionar à lista de desejos' if not na_lista_desejo else 'Já está na lista de desejos'}}
+        </button>
+      </form>
       {{pass}}
-
+    {{elif not auth.user:}}
+      <a class="btn btn-secundario" href="{{=URL('default', 'login')}}">Entre para comprar</a>
+    {{pass}}
     </div>
   </div>
 </div>
-
-<!-- ESTILOS DA GALERIA -->
-<style>
-.galeria-produto {
-  min-width: 0;
-}
-.descricao-produto {
-    white-space: pre-line;
-    line-height: 1.8;
-}
-.galeria-produto .foto-grande img {
-  width: 100%;
-  display: block;
-  object-fit: contain;
-}
-
-.galeria-miniaturas {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.miniatura-galeria {
-  border: 2px solid transparent;
-  border-radius: 8px;
-  padding: 4px;
-  background: transparent;
-  cursor: pointer;
-  overflow: hidden;
-  transition: border-color 0.2s, opacity 0.2s;
-}
-
-.miniatura-galeria img {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  display: block;
-  border-radius: 5px;
-}
-
-.miniatura-galeria:hover {
-  opacity: 0.75;
-}
-
-.miniatura-galeria.selecionada {
-  border-color: #7952b3;
-}
-
-.miniatura-galeria:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
-}
-</style>
-
-<!-- INTERAÇÃO DA GALERIA -->
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  const imagemPrincipal = document.getElementById('imagem-principal');
-  const miniaturas = document.querySelectorAll('.miniatura-galeria');
-
-  if (!imagemPrincipal) return;
-
-  miniaturas.forEach(function (miniatura) {
-    miniatura.addEventListener('click', function () {
-
-      imagemPrincipal.src = this.dataset.imagem;
-
-      miniaturas.forEach(function (item) {
-        item.classList.remove('selecionada');
-        item.setAttribute('aria-pressed', 'false');
-      });
-
-      this.classList.add('selecionada');
-      this.setAttribute('aria-pressed', 'true');
-
-    });
-  });
-});
-</script>
 '''
+
 # ---- views/default/registrar.html ------------------------------------------
 ARQUIVOS['views/default/registrar.html'] = r'''{{extend 'layout.html'}}
 {{response.title = 'Criar conta'}}
@@ -3038,7 +3244,7 @@ def _ativo(controller, *funcoes):
   <div class="topo-inner">
     <a class="marca" href="{{=URL('default', 'index')}}">
       <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 7h4l3 14h14l3-10H10" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="13" cy="26" r="2.2" fill="#fff"/><circle cx="23" cy="26" r="2.2" fill="#fff"/></svg>
-      <span>{{=NOME_LOJA}}<small>web2py · SQLite · React</small></span>
+      <span>{{=NOME_LOJA}}<small>Jogos clássicos e colecionáveis</small></span>
     </a>
     <div class="topo-direita">
       {{if auth.user:}}
@@ -3064,6 +3270,7 @@ def _ativo(controller, *funcoes):
       {{if tem_papel('cliente'):}}
       <a class="{{=_ativo('cliente', 'carrinho')}}" href="{{=URL('cliente', 'carrinho')}}">Carrinho
         <span id="badge-carrinho" class="badge {{='' if _nav['carrinho'] else 'vazio'}}">{{=_nav['carrinho']}}</span></a>
+      <a class="{{=_ativo('cliente', 'lista_desejo')}}" href="{{=URL('cliente', 'lista_desejo')}}">Lista de desejos</a>
       <a class="{{=_ativo('cliente', 'pedidos', 'pedido', 'pix', 'cancelar', 'reclamacao')}}" href="{{=URL('cliente', 'pedidos')}}">Meus pedidos</a>
       <a class="{{=_ativo('cliente', 'mensagens')}}" href="{{=URL('cliente', 'mensagens')}}">Mensagens</a>
       {{pass}}
@@ -3450,6 +3657,24 @@ ARQUIVOS['views/vendedor/form.html'] = r'''{{extend 'layout.html'}}
         {{if erros.get('categoria'):}}<span class="erro-campo">{{=erros['categoria']}}</span>{{pass}}
       </div>
       <div class="campo-linha">
+        <div class="campo">
+          <label for="console">Console</label>
+          <select id="console" name="console" {{if erros.get('console'):}}aria-invalid="true"{{pass}}>
+            <option value="">Sem console / não se aplica</option>
+            {{for c in consoles:}}<option value="{{=c}}" {{='selected' if dados['console'] == c else ''}}>{{=c}}</option>{{pass}}
+          </select>
+          {{if erros.get('console'):}}<span class="erro-campo">{{=erros['console']}}</span>{{pass}}
+        </div>
+        <div class="campo">
+          <label for="estado">Estado do produto</label>
+          <select id="estado" name="estado" required {{if erros.get('estado'):}}aria-invalid="true"{{pass}}>
+            <option value="">Selecione o estado</option>
+            {{for estado in estados:}}<option value="{{=estado}}" {{='selected' if dados['estado'] == estado else ''}}>{{=estado}}</option>{{pass}}
+          </select>
+          {{if erros.get('estado'):}}<span class="erro-campo">{{=erros['estado']}}</span>{{pass}}
+        </div>
+      </div>
+      <div class="campo-linha">
         {{campo('preco', 'Preço (R$)', 'text', dados['preco'], 'Ex.: 49,90', 'required inputmode="decimal"')}}
         {{campo('prazo_dias', 'Prazo de entrega (dias úteis)', 'number', dados['prazo_dias'], '', 'required min="1" max="365"')}}
         {{if not p:}}{{campo('estoque_inicial', 'Estoque inicial', 'number', dados['estoque_inicial'], 'Gera um movimento de entrada', 'min="0"')}}{{pass}}
@@ -3798,6 +4023,7 @@ code, .mono { font-family: var(--mono); font-size: .92em; }
   font-size: .85rem; color: var(--texto-2); flex: 1;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
 }
+.avaliacao { color: #875900; font-size: .86rem; font-weight: 600; }
 .preco { font-size: 1.25rem; font-weight: 700; color: var(--azul-800); font-variant-numeric: tabular-nums; }
 .produto-card .rodape-card { display: flex; align-items: center; justify-content: space-between; gap: .5rem; margin-top: .35rem; }
 .estoque-info { font-size: .8rem; color: var(--texto-2); }
@@ -3814,6 +4040,14 @@ code, .mono { font-family: var(--mono); font-size: .92em; }
 /* busca e filtros */
 .barra-busca { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .barra-busca input[type="search"] { flex: 1; min-width: 200px; }
+.filtros-avancados { margin-bottom: 1rem; }
+.filtros-titulo { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1rem; }
+.filtros-titulo h2 { margin: 0; font-size: 1.1rem; }
+.filtros-grade { display: grid; gap: 0 1rem; grid-template-columns: 1fr; }
+.filtros-grade .campo { margin-bottom: .75rem; }
+@media (min-width: 600px) { .filtros-grade { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 900px) { .filtros-grade { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.filtros-grade label { font-size: .85rem; }
 .chips { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: 1rem; }
 .chip {
   border: 1px solid var(--borda-forte); background: var(--superficie); color: var(--texto-2);
@@ -4151,6 +4385,11 @@ function CardProduto({ p, podeComprar, logado, aoAdicionar }) {
         <span className="categoria">{p.categoria || 'Sem categoria'} · {p.codigo}</span>
         <a className="nome" href={p.url}>{p.nome}</a>
         <p className="descricao">{p.descricao}</p>
+        <span className="pequeno">Estado: {p.estado}</span>
+        {p.console && <span className="pequeno">Console: {p.console}</span>}
+        <span className="avaliacao">
+          {p.avaliacao_media ? '★ ' + p.avaliacao_media.toFixed(1) + ' / 5 (' + p.avaliacao_quantidade + ')' : 'Sem avaliações'}
+        </span>
         <div className="rodape-card">
           <span className="preco">{p.preco_fmt}</span>
           {estoqueInfo}
@@ -4182,22 +4421,48 @@ function CardProduto({ p, podeComprar, logado, aoAdicionar }) {
 function Catalogo({ buscaInicial }) {
   const [busca, setBusca] = useState(buscaInicial || '');
   const [categoria, setCategoria] = useState('');
-  const [dados, setDados] = useState({ produtos: [], categorias: [], pode_comprar: false, logado: false });
+  const [consoleProduto, setConsoleProduto] = useState('');
+  const [precoMin, setPrecoMin] = useState('');
+  const [precoMax, setPrecoMax] = useState('');
+  const [avaliacaoMinima, setAvaliacaoMinima] = useState('');
+  const [estado, setEstado] = useState('');
+  const [dados, setDados] = useState({
+    produtos: [], categorias: [], consoles: [], estados: [], pode_comprar: false, logado: false
+  });
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const temporizador = useRef(null);
+  const requisicaoAtual = useRef(0);
 
-  // recarrega a lista quando busca/categoria mudam (com atraso de 300 ms ao digitar)
+  // recarrega o catálogo quando qualquer filtro muda
   useEffect(() => {
     clearTimeout(temporizador.current);
     temporizador.current = setTimeout(async () => {
+      const requisicao = ++requisicaoAtual.current;
       setCarregando(true);
-      const r = await LojaAPI.get('produtos', null, { q: busca, categoria });
+      const r = await LojaAPI.get('produtos', null, {
+        q: busca, categoria, console: consoleProduto, preco_min: precoMin,
+        preco_max: precoMax, avaliacao_minima: avaliacaoMinima, estado
+      });
+      if (requisicao !== requisicaoAtual.current) return;
       if (r.ok) { setDados(r); setErro(''); } else { setErro(r.erro || 'Não foi possível carregar o catálogo.'); }
       setCarregando(false);
     }, busca ? 300 : 0);
-    return () => clearTimeout(temporizador.current);
-  }, [busca, categoria]);
+    return () => {
+      clearTimeout(temporizador.current);
+      requisicaoAtual.current += 1;
+    };
+  }, [busca, categoria, consoleProduto, precoMin, precoMax, avaliacaoMinima, estado]);
+
+  function limparFiltros() {
+    setBusca('');
+    setCategoria('');
+    setConsoleProduto('');
+    setPrecoMin('');
+    setPrecoMax('');
+    setAvaliacaoMinima('');
+    setEstado('');
+  }
 
   async function adicionar(p, qtd) {
     const r = await LojaAPI.post('carrinho_adicionar', { produto_id: p.id, quantidade: qtd });
@@ -4214,22 +4479,62 @@ function Catalogo({ buscaInicial }) {
       <div className="barra-busca">
         <input type="search" placeholder="Buscar por nome, descrição ou código" value={busca}
                onChange={e => setBusca(e.target.value)} aria-label="Buscar produtos" />
-        {busca && <button type="button" className="btn btn-secundario" onClick={() => setBusca('')}>Limpar</button>}
       </div>
-      <div className="chips" role="tablist" aria-label="Categorias">
-        <button type="button" className={'chip' + (categoria === '' ? ' ativo' : '')} onClick={() => setCategoria('')}>Todas</button>
-        {dados.categorias.map(c => (
-          <button key={c.id} type="button" className={'chip' + (String(categoria) === String(c.id) ? ' ativo' : '')}
-                  onClick={() => setCategoria(String(c.id))}>{c.nome}</button>
-        ))}
-      </div>
+      <section className="cartao filtros-avancados" aria-label="Busca avançada">
+        <div className="filtros-titulo">
+          <h2>Busca avançada</h2>
+          <button type="button" className="btn btn-secundario" onClick={limparFiltros}>Limpar filtros</button>
+        </div>
+        <div className="filtros-grade">
+          <div className="campo">
+            <label htmlFor="filtro-console">Console</label>
+            <select id="filtro-console" value={consoleProduto} onChange={e => setConsoleProduto(e.target.value)}>
+              <option value="">Todos os consoles</option>
+              <option value="sem_console">Sem console</option>
+              {dados.consoles.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="campo">
+            <label htmlFor="filtro-preco-min">Preço mínimo (R$)</label>
+            <input id="filtro-preco-min" type="number" min="0" step="0.01" value={precoMin}
+                   onChange={e => setPrecoMin(e.target.value)} />
+          </div>
+          <div className="campo">
+            <label htmlFor="filtro-preco-max">Preço máximo (R$)</label>
+            <input id="filtro-preco-max" type="number" min="0" step="0.01" value={precoMax}
+                   onChange={e => setPrecoMax(e.target.value)} />
+          </div>
+          <div className="campo">
+            <label htmlFor="filtro-categoria">Categoria</label>
+            <select id="filtro-categoria" value={categoria} onChange={e => setCategoria(e.target.value)}>
+              <option value="">Todas as categorias</option>
+              {dados.categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </div>
+          <div className="campo">
+            <label htmlFor="filtro-avaliacao">Avaliação mínima</label>
+            <select id="filtro-avaliacao" value={avaliacaoMinima}
+                    onChange={e => setAvaliacaoMinima(e.target.value)}>
+              <option value="">Qualquer avaliação</option>
+              {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n} {n === 1 ? 'estrela' : 'estrelas'} ou mais</option>)}
+            </select>
+          </div>
+          <div className="campo">
+            <label htmlFor="filtro-estado">Estado</label>
+            <select id="filtro-estado" value={estado} onChange={e => setEstado(e.target.value)}>
+              <option value="">Todos os estados</option>
+              {dados.estados.map(e => <option key={e} value={e}>{e}</option>)}
+            </select>
+          </div>
+        </div>
+      </section>
       {erro && <div className="aviso aviso-erro">{erro}</div>}
       {carregando && dados.produtos.length === 0 ? (
         <p className="carregando">Carregando produtos…</p>
       ) : dados.produtos.length === 0 ? (
         <div className="cartao vazio-caixa">
           <p>Nenhum produto encontrado{busca ? ' para "' + busca + '"' : ''}.</p>
-          <button type="button" className="btn btn-secundario" onClick={() => { setBusca(''); setCategoria(''); }}>Ver todos os produtos</button>
+          <button type="button" className="btn btn-secundario" onClick={limparFiltros}>Ver todos os produtos</button>
         </div>
       ) : (
         <div className="grade-produtos" aria-busy={carregando}>
@@ -4828,10 +5133,7 @@ ARQUIVOS['static/js/componentes/compilado/carrinho.js'] = r'''/* GERADO AUTOMATI
 '''
 
 # ---- static/js/componentes/compilado/catalogo.js ---------------------------
-ARQUIVOS['static/js/componentes/compilado/catalogo.js'] = r'''/* GERADO AUTOMATICAMENTE a partir de ../catalogo.jsx pelo Babel (preset react).
-   fonte: catalogo.jsx sha256:a9e6c71ae47bcf08c73e1019356cc5e5b31e089ad2b47dea53c5f3c6c9146df5
-   Não edite este arquivo: edite o .jsx e recompile (node compilar_jsx.js) — ou
-   simplesmente salve o .jsx: a página vê que o hash mudou e compila com o Babel. */
+ARQUIVOS['static/js/componentes/compilado/catalogo.js'] = r'''/* GERADO a partir de catalogo.jsx; sha256:0d28fb3119d3b80ba1ecb14e223cb13e4a16463ebb2e2ca9f1423b36b87ce0fb */
 /* =============================================================================
    <Catalogo/> — grade de produtos com busca ao digitar e filtro por categoria.
    Consome GET api/produtos e, ao comprar, POST api/carrinho_adicionar.
@@ -4885,7 +5187,13 @@ ARQUIVOS['static/js/componentes/compilado/catalogo.js'] = r'''/* GERADO AUTOMATI
       href: p.url
     }, p.nome), /*#__PURE__*/React.createElement("p", {
       className: "descricao"
-    }, p.descricao), /*#__PURE__*/React.createElement("div", {
+    }, p.descricao), /*#__PURE__*/React.createElement("span", {
+      className: "pequeno"
+    }, "Estado: ", p.estado), p.console && /*#__PURE__*/React.createElement("span", {
+      className: "pequeno"
+    }, "Console: ", p.console), /*#__PURE__*/React.createElement("span", {
+      className: "avaliacao"
+    }, p.avaliacao_media ? '★ ' + p.avaliacao_media.toFixed(1) + ' / 5 (' + p.avaliacao_quantidade + ')' : 'Sem avaliações'), /*#__PURE__*/React.createElement("div", {
       className: "rodape-card"
     }, /*#__PURE__*/React.createElement("span", {
       className: "preco"
@@ -4929,25 +5237,40 @@ ARQUIVOS['static/js/componentes/compilado/catalogo.js'] = r'''/* GERADO AUTOMATI
   }) {
     const [busca, setBusca] = useState(buscaInicial || '');
     const [categoria, setCategoria] = useState('');
+    const [consoleProduto, setConsoleProduto] = useState('');
+    const [precoMin, setPrecoMin] = useState('');
+    const [precoMax, setPrecoMax] = useState('');
+    const [avaliacaoMinima, setAvaliacaoMinima] = useState('');
+    const [estado, setEstado] = useState('');
     const [dados, setDados] = useState({
       produtos: [],
       categorias: [],
+      consoles: [],
+      estados: [],
       pode_comprar: false,
       logado: false
     });
     const [carregando, setCarregando] = useState(true);
     const [erro, setErro] = useState('');
     const temporizador = useRef(null);
+    const requisicaoAtual = useRef(0);
 
-    // recarrega a lista quando busca/categoria mudam (com atraso de 300 ms ao digitar)
+    // recarrega o catálogo quando qualquer filtro muda
     useEffect(() => {
       clearTimeout(temporizador.current);
       temporizador.current = setTimeout(async () => {
+        const requisicao = ++requisicaoAtual.current;
         setCarregando(true);
         const r = await LojaAPI.get('produtos', null, {
           q: busca,
-          categoria
+          categoria,
+          console: consoleProduto,
+          preco_min: precoMin,
+          preco_max: precoMax,
+          avaliacao_minima: avaliacaoMinima,
+          estado
         });
+        if (requisicao !== requisicaoAtual.current) return;
         if (r.ok) {
           setDados(r);
           setErro('');
@@ -4956,8 +5279,20 @@ ARQUIVOS['static/js/componentes/compilado/catalogo.js'] = r'''/* GERADO AUTOMATI
         }
         setCarregando(false);
       }, busca ? 300 : 0);
-      return () => clearTimeout(temporizador.current);
-    }, [busca, categoria]);
+      return () => {
+        clearTimeout(temporizador.current);
+        requisicaoAtual.current += 1;
+      };
+    }, [busca, categoria, consoleProduto, precoMin, precoMax, avaliacaoMinima, estado]);
+    function limparFiltros() {
+      setBusca('');
+      setCategoria('');
+      setConsoleProduto('');
+      setPrecoMin('');
+      setPrecoMax('');
+      setAvaliacaoMinima('');
+      setEstado('');
+    }
     async function adicionar(p, qtd) {
       const r = await LojaAPI.post('carrinho_adicionar', {
         produto_id: p.id,
@@ -4978,24 +5313,94 @@ ARQUIVOS['static/js/componentes/compilado/catalogo.js'] = r'''/* GERADO AUTOMATI
       value: busca,
       onChange: e => setBusca(e.target.value),
       "aria-label": "Buscar produtos"
-    }), busca && /*#__PURE__*/React.createElement("button", {
+    })), /*#__PURE__*/React.createElement("section", {
+      className: "cartao filtros-avancados",
+      "aria-label": "Busca avan\xE7ada"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "filtros-titulo"
+    }, /*#__PURE__*/React.createElement("h2", null, "Busca avan\xE7ada"), /*#__PURE__*/React.createElement("button", {
       type: "button",
       className: "btn btn-secundario",
-      onClick: () => setBusca('')
-    }, "Limpar")), /*#__PURE__*/React.createElement("div", {
-      className: "chips",
-      role: "tablist",
-      "aria-label": "Categorias"
-    }, /*#__PURE__*/React.createElement("button", {
-      type: "button",
-      className: 'chip' + (categoria === '' ? ' ativo' : ''),
-      onClick: () => setCategoria('')
-    }, "Todas"), dados.categorias.map(c => /*#__PURE__*/React.createElement("button", {
+      onClick: limparFiltros
+    }, "Limpar filtros")), /*#__PURE__*/React.createElement("div", {
+      className: "filtros-grade"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "campo"
+    }, /*#__PURE__*/React.createElement("label", {
+      htmlFor: "filtro-console"
+    }, "Console"), /*#__PURE__*/React.createElement("select", {
+      id: "filtro-console",
+      value: consoleProduto,
+      onChange: e => setConsoleProduto(e.target.value)
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "Todos os consoles"), /*#__PURE__*/React.createElement("option", {
+      value: "sem_console"
+    }, "Sem console"), dados.consoles.map(c => /*#__PURE__*/React.createElement("option", {
+      key: c,
+      value: c
+    }, c)))), /*#__PURE__*/React.createElement("div", {
+      className: "campo"
+    }, /*#__PURE__*/React.createElement("label", {
+      htmlFor: "filtro-preco-min"
+    }, "Pre\xE7o m\xEDnimo (R$)"), /*#__PURE__*/React.createElement("input", {
+      id: "filtro-preco-min",
+      type: "number",
+      min: "0",
+      step: "0.01",
+      value: precoMin,
+      onChange: e => setPrecoMin(e.target.value)
+    })), /*#__PURE__*/React.createElement("div", {
+      className: "campo"
+    }, /*#__PURE__*/React.createElement("label", {
+      htmlFor: "filtro-preco-max"
+    }, "Pre\xE7o m\xE1ximo (R$)"), /*#__PURE__*/React.createElement("input", {
+      id: "filtro-preco-max",
+      type: "number",
+      min: "0",
+      step: "0.01",
+      value: precoMax,
+      onChange: e => setPrecoMax(e.target.value)
+    })), /*#__PURE__*/React.createElement("div", {
+      className: "campo"
+    }, /*#__PURE__*/React.createElement("label", {
+      htmlFor: "filtro-categoria"
+    }, "Categoria"), /*#__PURE__*/React.createElement("select", {
+      id: "filtro-categoria",
+      value: categoria,
+      onChange: e => setCategoria(e.target.value)
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "Todas as categorias"), dados.categorias.map(c => /*#__PURE__*/React.createElement("option", {
       key: c.id,
-      type: "button",
-      className: 'chip' + (String(categoria) === String(c.id) ? ' ativo' : ''),
-      onClick: () => setCategoria(String(c.id))
-    }, c.nome))), erro && /*#__PURE__*/React.createElement("div", {
+      value: c.id
+    }, c.nome)))), /*#__PURE__*/React.createElement("div", {
+      className: "campo"
+    }, /*#__PURE__*/React.createElement("label", {
+      htmlFor: "filtro-avaliacao"
+    }, "Avalia\xE7\xE3o m\xEDnima"), /*#__PURE__*/React.createElement("select", {
+      id: "filtro-avaliacao",
+      value: avaliacaoMinima,
+      onChange: e => setAvaliacaoMinima(e.target.value)
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "Qualquer avalia\xE7\xE3o"), [1, 2, 3, 4, 5].map(n => /*#__PURE__*/React.createElement("option", {
+      key: n,
+      value: n
+    }, n, " ", n === 1 ? 'estrela' : 'estrelas', " ou mais")))), /*#__PURE__*/React.createElement("div", {
+      className: "campo"
+    }, /*#__PURE__*/React.createElement("label", {
+      htmlFor: "filtro-estado"
+    }, "Estado"), /*#__PURE__*/React.createElement("select", {
+      id: "filtro-estado",
+      value: estado,
+      onChange: e => setEstado(e.target.value)
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "Todos os estados"), dados.estados.map(e => /*#__PURE__*/React.createElement("option", {
+      key: e,
+      value: e
+    }, e)))))), erro && /*#__PURE__*/React.createElement("div", {
       className: "aviso aviso-erro"
     }, erro), carregando && dados.produtos.length === 0 ? /*#__PURE__*/React.createElement("p", {
       className: "carregando"
@@ -5004,10 +5409,7 @@ ARQUIVOS['static/js/componentes/compilado/catalogo.js'] = r'''/* GERADO AUTOMATI
     }, /*#__PURE__*/React.createElement("p", null, "Nenhum produto encontrado", busca ? ' para "' + busca + '"' : '', "."), /*#__PURE__*/React.createElement("button", {
       type: "button",
       className: "btn btn-secundario",
-      onClick: () => {
-        setBusca('');
-        setCategoria('');
-      }
+      onClick: limparFiltros
     }, "Ver todos os produtos")) : /*#__PURE__*/React.createElement("div", {
       className: "grade-produtos",
       "aria-busy": carregando
@@ -11697,18 +12099,25 @@ def extrair_aplicacao(forcar=False):
 
 # ---------------------------------------------------------------- 5. imagens
 def extrair_imagens(forcar=False):
-    """Grava as imagens de exemplo em <RAIZ>/imagens/ (só as que faltam)."""
+    """Grava exemplos ausentes sem substituir capas ou imagens personalizadas."""
     pasta = os.path.join(RAIZ, 'imagens')
     os.makedirs(pasta, exist_ok=True)
     n = 0
     for nome, dados in IMAGENS.items():
         destino = os.path.join(pasta, nome)
-        if os.path.exists(destino) and not forcar:
-            continue
+        conteudo = base64.b64decode(dados)
+        if os.path.exists(destino):
+            if not forcar:
+                continue
+            with open(destino, 'rb') as atual:
+                if atual.read() != conteudo:
+                    continue
         with open(destino, 'wb') as f:
-            f.write(base64.b64decode(dados))
+            f.write(conteudo)
         n += 1
-    mensagem('imagens OK em %s (%d gravadas agora, %d no total)' % (pasta, n, len(IMAGENS)))
+    total = sum(os.path.isfile(os.path.join(pasta, arquivo)) for arquivo in os.listdir(pasta))
+    mensagem('imagens OK em %s (%d exemplos gravados agora, %d arquivos na pasta)' %
+             (pasta, n, total))
     return n
 
 
@@ -11918,7 +12327,8 @@ def main(argv=None):
     parser.add_argument('--atualizar', action='store_true',
                         help='sobrescreve também os arquivos da aplicação que você editou')
     parser.add_argument('--limpar-banco', action='store_true', help='apaga loja.sqlite e recria os dados demo')
-    parser.add_argument('--regravar-imagens', action='store_true', help='regrava as imagens de exemplo')
+    parser.add_argument('--regravar-imagens', action='store_true',
+                        help='regrava exemplos embutidos sem substituir capas personalizadas')
     parser.add_argument('--babel', action='store_true', help='baixa o Babel standalone (editar .jsx sem internet)')
     parser.add_argument('--offline', action='store_true', help='não baixa nada nem cria o venv')
     parser.add_argument('--sem-venv', action='store_true', help='não cria venv/ (usa o Python atual mesmo sem Pillow/qrcode)')

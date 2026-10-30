@@ -33,6 +33,24 @@
         {{if erros.get('categoria'):}}<span class="erro-campo">{{=erros['categoria']}}</span>{{pass}}
       </div>
       <div class="campo-linha">
+        <div class="campo">
+          <label for="console">Console</label>
+          <select id="console" name="console" {{if erros.get('console'):}}aria-invalid="true"{{pass}}>
+            <option value="">Sem console / não se aplica</option>
+            {{for c in consoles:}}<option value="{{=c}}" {{='selected' if dados['console'] == c else ''}}>{{=c}}</option>{{pass}}
+          </select>
+          {{if erros.get('console'):}}<span class="erro-campo">{{=erros['console']}}</span>{{pass}}
+        </div>
+        <div class="campo">
+          <label for="estado">Estado do produto</label>
+          <select id="estado" name="estado" required {{if erros.get('estado'):}}aria-invalid="true"{{pass}}>
+            <option value="">Selecione o estado</option>
+            {{for estado in estados:}}<option value="{{=estado}}" {{='selected' if dados['estado'] == estado else ''}}>{{=estado}}</option>{{pass}}
+          </select>
+          {{if erros.get('estado'):}}<span class="erro-campo">{{=erros['estado']}}</span>{{pass}}
+        </div>
+      </div>
+      <div class="campo-linha">
         {{campo('preco', 'Preço (R$)', 'text', dados['preco'], 'Ex.: 49,90', 'required inputmode="decimal"')}}
         {{campo('prazo_dias', 'Prazo de entrega (dias úteis)', 'number', dados['prazo_dias'], '', 'required min="1" max="365"')}}
         {{if not p:}}{{campo('estoque_inicial', 'Estoque inicial', 'number', dados['estoque_inicial'], 'Gera um movimento de entrada', 'min="0"')}}{{pass}}

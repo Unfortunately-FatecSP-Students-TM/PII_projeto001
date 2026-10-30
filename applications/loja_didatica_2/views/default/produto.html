@@ -1,214 +1,66 @@
 {{extend 'layout.html'}}
 {{response.title = p.nome}}
-
-<p class="pequeno">
-  <a href="{{=URL('default', 'index')}}">Catálogo</a>
-  › {{=p.categoria.nome if p.categoria else 'Sem categoria'}}
-</p>
-
+<p class="pequeno"><a href="{{=URL('default', 'index')}}">Catálogo</a> › {{=p.categoria.nome if p.categoria else 'Sem categoria'}}</p>
 <div class="detalhe">
-
-  <!-- GALERIA DE IMAGENS -->
-  <div class="galeria-produto">
-
-    <div class="foto-grande">
-      <img
-        id="imagem-principal"
-        src="{{=URL('default', 'imagem', args=[galeria[0]]) if galeria else url_imagem(p, mini=False)}}"
-        alt="{{=p.nome}}"
-      >
-    </div>
-
-    {{if len(galeria) > 1:}}
-    <div class="galeria-miniaturas">
-
-      {{for indice, imagem in enumerate(galeria):}}
-      <button
-        type="button"
-        class="miniatura-galeria{{=' selecionada' if indice == 0 else ''}}"
-        data-imagem="{{=URL('default', 'imagem', args=[imagem])}}"
-        aria-label="Visualizar imagem {{=indice + 1}} de {{=p.nome}}"
-        aria-pressed="{{='true' if indice == 0 else 'false'}}"
-      >
-        <img
-          src="{{=URL('default', 'imagem', args=[imagem])}}"
-          alt="Miniatura {{=indice + 1}}"
-          loading="lazy"
-        >
-      </button>
-      {{pass}}
-
-    </div>
-    {{pass}}
-
-  </div>
-
-  <!-- INFORMAÇÕES DO PRODUTO -->
+  <div class="foto-grande"><img src="{{=url_imagem(p, mini=False)}}" alt="{{=p.nome}}"></div>
   <div class="cartao">
-
     <h1>{{=p.nome}}</h1>
-
-    <p class="texto-3 mono pequeno">
-      {{=p.codigo}}
-      {{if not p.ativo:}}
-        · <span class="etiqueta inativo">fora do catálogo</span>
-      {{pass}}
-    </p>
-
-    <p class="preco" style="font-size:1.8rem">
-      {{=moeda(p.preco)}}
-    </p>
-
-    <p class="descricao-produto">{{=p.descricao or 'Sem descrição.'}}</p>
-
+    <p class="texto-3 mono pequeno">{{=p.codigo}}{{if not p.ativo:}} · <span class="etiqueta inativo">fora do catálogo</span>{{pass}}</p>
+    <p class="preco" style="font-size:1.8rem">{{=moeda(p.preco)}}</p>
+    <p>{{=p.descricao or 'Sem descrição.'}}</p>
+    <p><strong>Estado:</strong> {{=p.estado}}</p>
+    {{if p.console:}}<p><strong>Console:</strong> {{=p.console}}</p>{{pass}}
+    <p class="avaliacao">{{if avaliacao:}}★ {{='%.1f' % avaliacao['media']}} / 5 · {{=avaliacao['quantidade']}} avaliação(ões){{else:}}Ainda sem avaliações{{pass}}</p>
     <dl class="definicoes">
-      <dt>Entrega</dt>
-      <dd>em até {{=p.prazo_dias}} dias úteis</dd>
-
+      <dt>Entrega</dt><dd>em até {{=p.prazo_dias}} dias úteis</dd>
       <dt>Estoque</dt>
-      <dd>
-        {{if p.estoque == 0:}}
-          <span class="estoque-info zerado">Esgotado</span>
-        {{elif p.estoque <= 5:}}
-          <span class="estoque-info baixo">
-            Só {{=p.estoque}} unidade(s)
-          </span>
-        {{else:}}
-          {{=p.estoque}} unidades
-        {{pass}}
-      </dd>
-
-      <dt>Vendido por</dt>
-      <dd>
-        {{=nome_usuario(p.vendedor) if p.vendedor else NOME_LOJA}}
-      </dd>
+      <dd>{{if p.estoque == 0:}}<span class="estoque-info zerado">Esgotado</span>
+          {{elif p.estoque <= 5:}}<span class="estoque-info baixo">Só {{=p.estoque}} unidade(s)</span>
+          {{else:}}{{=p.estoque}} unidades{{pass}}</dd>
+      <dt>Vendido por</dt><dd>{{=nome_usuario(p.vendedor) if p.vendedor else NOME_LOJA}}</dd>
     </dl>
-
     <div class="mt-1">
-
-      {{if tem_papel('cliente'):}}
-
-        {{if p.estoque > 0 and p.ativo:}}
-        <form
-          method="post"
-          action="{{=URL('cliente', 'adicionar', args=[p.id])}}"
-          class="acoes"
-          id="form-adicionar"
-        >
-          <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
-
-          <label for="qtd" class="pequeno">Quantidade</label>
-
-          <input
-            id="qtd"
-            type="number"
-            name="quantidade"
-            value="1"
-            min="1"
-            max="{{=p.estoque}}"
-            style="width:6rem"
-          >
-
-          <button class="btn btn-primario" type="submit">
-            Adicionar ao carrinho
-          </button>
-        </form>
-
-        {{else:}}
-          <button class="btn btn-primario" disabled>
-            Esgotado
-          </button>
-        {{pass}}
-
-      {{elif not auth.user:}}
-        <a
-          class="btn btn-secundario"
-          href="{{=URL('default', 'login')}}"
-        >
-          Entre para comprar
-        </a>
+    {{if pode_avaliar:}}
+    <form method="post" action="{{=URL('cliente', 'avaliar_produto', args=[p.id])}}" class="cartao mt-1">
+      <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+      <label for="nota">{{='Atualize sua avaliação' if minha_avaliacao else 'Avalie este produto'}}</label>
+      <div class="acoes mt-1">
+        <select id="nota" name="nota" required>
+          <option value="">Escolha uma nota</option>
+          {{for nota in range(5, 0, -1):}}<option value="{{=nota}}" {{='selected' if minha_avaliacao and minha_avaliacao.nota == nota else ''}}>{{=nota}} {{='estrela' if nota == 1 else 'estrelas'}}</option>{{pass}}
+        </select>
+        <button class="btn btn-secundario" type="submit">Enviar avaliação</button>
+      </div>
+    </form>
+    {{elif tem_papel('cliente'):}}
+    <p class="pequeno texto-2 mt-1">Você poderá avaliar após a entrega de um pedido com este produto.</p>
+    {{pass}}
+    {{if tem_papel('cliente'):}}
+      {{if p.estoque > 0 and p.ativo:}}
+      <form method="post" action="{{=URL('cliente', 'adicionar', args=[p.id])}}" class="acoes" id="form-adicionar">
+        <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+        <label for="qtd" class="pequeno">Quantidade</label>
+        <input id="qtd" type="number" name="quantidade" value="1" min="1" max="{{=p.estoque}}" style="width:6rem">
+        <button class="btn btn-primario" type="submit">Adicionar ao carrinho</button>
+      </form>
+      <form method="post" action="{{=URL('cliente', 'desejo_adicionar', args=[p.id])}}" class="mt-1">
+        <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+        <button class="btn btn-secundario" type="submit" {{if na_lista_desejo:}}disabled{{pass}}>
+          {{='Adicionar à lista de desejos' if not na_lista_desejo else 'Já está na lista de desejos'}}
+        </button>
+      </form>
+      {{else:}}
+      <button class="btn btn-primario" disabled>Esgotado</button>
+      <form method="post" action="{{=URL('cliente', 'desejo_adicionar', args=[p.id])}}" class="mt-1">
+        <input type="hidden" name="_csrf" value="{{=csrf_token()}}">
+        <button class="btn btn-secundario" type="submit" {{if na_lista_desejo:}}disabled{{pass}}>
+          {{='Adicionar à lista de desejos' if not na_lista_desejo else 'Já está na lista de desejos'}}
+        </button>
+      </form>
       {{pass}}
-
+    {{elif not auth.user:}}
+      <a class="btn btn-secundario" href="{{=URL('default', 'login')}}">Entre para comprar</a>
+    {{pass}}
     </div>
   </div>
 </div>
-
-<!-- ESTILOS DA GALERIA -->
-<style>
-.galeria-produto {
-  min-width: 0;
-}
-.descricao-produto {
-    white-space: pre-line;
-    line-height: 1.8;
-}
-.galeria-produto .foto-grande img {
-  width: 100%;
-  display: block;
-  object-fit: contain;
-}
-
-.galeria-miniaturas {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.miniatura-galeria {
-  border: 2px solid transparent;
-  border-radius: 8px;
-  padding: 4px;
-  background: transparent;
-  cursor: pointer;
-  overflow: hidden;
-  transition: border-color 0.2s, opacity 0.2s;
-}
-
-.miniatura-galeria img {
-  width: 100%;
-  aspect-ratio: 4 / 3;
-  object-fit: cover;
-  display: block;
-  border-radius: 5px;
-}
-
-.miniatura-galeria:hover {
-  opacity: 0.75;
-}
-
-.miniatura-galeria.selecionada {
-  border-color: #7952b3;
-}
-
-.miniatura-galeria:focus-visible {
-  outline: 2px solid currentColor;
-  outline-offset: 2px;
-}
-</style>
-
-<!-- INTERAÇÃO DA GALERIA -->
-<script>
-document.addEventListener('DOMContentLoaded', function () {
-  const imagemPrincipal = document.getElementById('imagem-principal');
-  const miniaturas = document.querySelectorAll('.miniatura-galeria');
-
-  if (!imagemPrincipal) return;
-
-  miniaturas.forEach(function (miniatura) {
-    miniatura.addEventListener('click', function () {
-
-      imagemPrincipal.src = this.dataset.imagem;
-
-      miniaturas.forEach(function (item) {
-        item.classList.remove('selecionada');
-        item.setAttribute('aria-pressed', 'false');
-      });
-
-      this.classList.add('selecionada');
-      this.setAttribute('aria-pressed', 'true');
-
-    });
-  });
-});
-</script>

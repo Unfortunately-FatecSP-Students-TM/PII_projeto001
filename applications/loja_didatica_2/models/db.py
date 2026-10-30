@@ -15,7 +15,7 @@ import hashlib
 import sqlite3
 from decimal import Decimal
 
-from gluon.tools import Auth
+from gluon.tools import Auth, Mail
 
 # o driver sqlite3 não aceita Decimal como parâmetro; gravamos como número real
 sqlite3.register_adapter(Decimal, float)
@@ -47,6 +47,15 @@ response.generic_patterns = []          # não expõe views genéricas (.json/.x
 # 2. Constantes da loja
 # -----------------------------------------------------------------------------
 NOME_LOJA = 'Loja Didática 2'
+
+CONSOLES = [
+    'PlayStation', 'PlayStation 1', 'PlayStation 2', 'PlayStation 3', 'PSP', 'PS Vita',
+    'NES', 'Super Nintendo', 'Game Boy', 'Game Boy Color', 'Game Boy Advance',
+    'Nintendo DS', 'Nintendo 3DS', 'Nintendo 64', 'GameCube', 'Wii', 'Wii U',
+    'Master System', 'Sega Genesis', 'Dreamcast', 'Xbox', 'Xbox 360',
+    'Nintendo Switch', 'PC', 'Atari 2600',
+]
+ESTADOS_PRODUTO = ['Novo', 'Como novo', 'Muito bom', 'Bom', 'Aceitável']
 
 PAPEIS = ['cliente', 'vendedor', 'operador', 'administrador']
 PAPEL_DESCRICAO = {
@@ -110,9 +119,23 @@ auth.settings.expiration = 8 * 3600                      # sessão de 8 horas
 auth.settings.login_url = URL('default', 'login')
 auth.settings.logout_next = URL('default', 'index')
 auth.settings.on_failed_authorization = URL('default', 'sem_permissao')
-auth.settings.actions_disabled = ['register', 'retrieve_username',
-                                  'request_reset_password', 'reset_password',
-                                  'verify_email', 'impersonate', 'groups']
+auth.settings.actions_disabled = [
+    'login', 'logout', 'register', 'profile', 'change_password',
+    'retrieve_password', 'retrieve_username', 'request_reset_password',
+    'bulk_register', 'verify_email', 'impersonate', 'groups',
+]
+
+smtp_server = os.environ.get('LOJA_SMTP_SERVER', '').strip()
+smtp_sender = os.environ.get('LOJA_SMTP_SENDER', '').strip()
+if smtp_server and smtp_sender:
+    smtp_login = os.environ.get('LOJA_SMTP_LOGIN', '').strip() or None
+    smtp_tls = os.environ.get('LOJA_SMTP_TLS', 'true').strip().lower() not in (
+        '0', 'false', 'no', 'off')
+    smtp_ssl = os.environ.get('LOJA_SMTP_SSL', 'false').strip().lower() in (
+        '1', 'true', 'yes', 'on')
+    auth.settings.mailer = Mail(server=smtp_server, sender=smtp_sender,
+                                login=smtp_login, tls=smtp_tls)
+    auth.settings.mailer.settings.ssl = smtp_ssl
 
 db.auth_user.first_name.label = 'Nome'
 db.auth_user.last_name.label = 'Sobrenome'
@@ -134,6 +157,10 @@ db.define_table('produto',
     Field('nome', 'string', length=120, notnull=True, requires=IS_NOT_EMPTY(), label='Nome'),
     Field('descricao', 'text', default='', label='Descrição'),
     Field('categoria', 'reference categoria', ondelete='SET NULL', label='Categoria'),
+    Field('console', 'string', length=30, default='', requires=IS_IN_SET([''] + CONSOLES),
+          label='Console'),
+    Field('estado', 'string', length=20, notnull=True, default='Novo',
+          requires=IS_IN_SET(ESTADOS_PRODUTO), label='Estado'),
     Field('preco', 'decimal(10,2)', notnull=True, default=0,
           requires=IS_DECIMAL_IN_RANGE(0, 999999), label='Preço (R$)'),
     Field('estoque', 'integer', notnull=True, default=0,
@@ -147,6 +174,14 @@ db.define_table('produto',
     Field('atualizado_em', 'datetime', default=request.now, update=request.now,
           writable=False),
     format='%(codigo)s - %(nome)s')
+
+db.define_table('avaliacao_produto',
+    Field('produto', 'reference produto', ondelete='CASCADE', notnull=True),
+    Field('cliente', 'reference auth_user', ondelete='CASCADE', notnull=True),
+    Field('nota', 'integer', notnull=True, requires=IS_INT_IN_RANGE(1, 6)),
+    Field('chave', 'string', length=64, notnull=True, unique=True, writable=False),
+    Field('criado_em', 'datetime', default=request.now),
+    Field('atualizado_em', 'datetime', default=request.now, update=request.now))
 
 db.define_table('pedido',
     Field('codigo', 'string', length=16, notnull=True, unique=True),      # PED-XXXXXXXX
@@ -189,6 +224,13 @@ db.define_table('carrinho_item',
     Field('usuario', 'reference auth_user', ondelete='CASCADE', notnull=True),
     Field('produto', 'reference produto', ondelete='CASCADE', notnull=True),
     Field('quantidade', 'integer', notnull=True, default=1),
+    Field('criado_em', 'datetime', default=request.now))
+
+# Lista de desejos persistente: uma entrada por combinação de usuário e produto.
+db.define_table('lista_desejo',
+    Field('usuario', 'reference auth_user', ondelete='CASCADE', notnull=True),
+    Field('produto', 'reference produto', ondelete='CASCADE', notnull=True),
+    Field('chave', 'string', length=64, notnull=True, unique=True, writable=False),
     Field('criado_em', 'datetime', default=request.now))
 
 # Pagamento PIX fictício — um por pedido; aprovado manualmente por um operador

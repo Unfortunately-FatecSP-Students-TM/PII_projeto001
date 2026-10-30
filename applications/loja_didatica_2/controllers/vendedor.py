@@ -34,6 +34,7 @@ def _ler_formulario_produto(p=None):
     # começa com os textos digitados (para reexibir o formulário em caso de erro)
     dados = dict(nome=(v.nome or '').strip(), descricao=(v.descricao or '').strip(),
                  categoria=v.categoria or None, ativo=bool(v.ativo),
+                 console=v.console or '', estado=v.estado or '',
                  preco=(v.preco or '').strip(), prazo_dias=(v.prazo_dias or '').strip(),
                  estoque_inicial=(v.estoque_inicial or '0').strip())
     erros = {}
@@ -60,6 +61,10 @@ def _ler_formulario_produto(p=None):
             erros['estoque_inicial'] = 'Estoque inicial inválido.'
     if dados['categoria'] and not db.categoria(dados['categoria']):
         erros['categoria'] = 'Categoria inválida.'
+    if dados['console'] not in [''] + CONSOLES:
+        erros['console'] = 'Console inválido.'
+    if dados['estado'] not in ESTADOS_PRODUTO:
+        erros['estado'] = 'Selecione um estado válido.'
     return dados, erros
 
 
@@ -74,8 +79,8 @@ def novo():
     """Cadastro de produto com upload da imagem (multipart/form-data)."""
     response.view = 'vendedor/form.html'
     categorias = db(db.categoria).select(orderby=db.categoria.nome)
-    dados, erros = dict(nome='', descricao='', categoria=None, preco='', prazo_dias=5,
-                        estoque_inicial=0, ativo=True), {}
+    dados, erros = dict(nome='', descricao='', categoria=None, console='', estado='Novo',
+                        preco='', prazo_dias=5, estoque_inicial=0, ativo=True), {}
     if request.env.request_method == 'POST':
         exigir_post_seguro()
         dados, erros = _ler_formulario_produto()
@@ -83,6 +88,7 @@ def novo():
         if not erros:
             pid = db.produto.insert(codigo=gerar_codigo_produto(), nome=dados['nome'],
                                     descricao=dados['descricao'], categoria=dados['categoria'],
+                                    console=dados['console'], estado=dados['estado'],
                                     preco=dados['preco'], estoque=0,
                                     prazo_dias=dados['prazo_dias'], ativo=dados['ativo'],
                                     vendedor=auth.user_id)
@@ -100,7 +106,8 @@ def novo():
                     redirect(URL('editar', args=[pid]))
             avisar('ok', 'Produto %s cadastrado.' % p.codigo)
             redirect(URL('index'))
-    return dict(p=None, dados=dados, erros=erros, categorias=categorias)
+    return dict(p=None, dados=dados, erros=erros, categorias=categorias,
+                consoles=CONSOLES, estados=ESTADOS_PRODUTO)
 
 
 @requer_papel('vendedor')
@@ -109,6 +116,7 @@ def editar():
     p = _meu_produto()
     categorias = db(db.categoria).select(orderby=db.categoria.nome)
     dados = dict(nome=p.nome, descricao=p.descricao, categoria=p.categoria,
+                 console=p.console or '', estado=p.estado,
                  preco=('%.2f' % p.preco).replace('.', ','), prazo_dias=p.prazo_dias,
                  ativo=p.ativo)
     erros = {}
@@ -117,7 +125,8 @@ def editar():
         dados, erros = _ler_formulario_produto(p)
         if not erros:
             p.update_record(nome=dados['nome'], descricao=dados['descricao'],
-                            categoria=dados['categoria'], preco=dados['preco'],
+                            categoria=dados['categoria'], console=dados['console'],
+                            estado=dados['estado'], preco=dados['preco'],
                             prazo_dias=dados['prazo_dias'], ativo=dados['ativo'])
             if request.vars.remover_imagem:
                 remover_imagem_produto(p)
@@ -133,7 +142,8 @@ def editar():
                 redirect(URL('index'))
             avisar('ok', 'Produto %s atualizado.' % p.codigo)
             redirect(URL('index'))
-    return dict(p=p, dados=dados, erros=erros, categorias=categorias)
+    return dict(p=p, dados=dados, erros=erros, categorias=categorias,
+                consoles=CONSOLES, estados=ESTADOS_PRODUTO)
 
 
 @requer_papel('vendedor')

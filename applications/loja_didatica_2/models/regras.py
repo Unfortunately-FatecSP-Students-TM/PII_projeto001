@@ -74,11 +74,70 @@ def itens_carrinho(usuario_id):
               ).select(orderby=db.carrinho_item.id)
 
 
-def produto_para_json(p):
+def itens_lista_desejo(usuario_id):
+    """Produtos salvos na lista de desejos do usuário."""
+    return db((db.lista_desejo.usuario == usuario_id) &
+              (db.lista_desejo.produto == db.produto.id)
+              ).select(orderby=~db.lista_desejo.criado_em)
+
+
+def produto_na_lista_desejo(usuario_id, produto_id):
+    """Indica se o produto já está salvo pelo usuário."""
+    return bool(db((db.lista_desejo.usuario == usuario_id) &
+                   (db.lista_desejo.produto == produto_id)).count())
+
+
+def adicionar_lista_desejo(usuario_id, produto_id):
+    """Salva um produto ativo sem duplicar a entrada do usuário."""
+    produto = db.produto[produto_id]
+    if not produto or not produto.ativo:
+        raise ErroDeNegocio('Produto indisponível.')
+    if produto_na_lista_desejo(usuario_id, produto_id):
+        return produto, False
+    db.lista_desejo.insert(usuario=usuario_id, produto=produto_id,
+                           chave='%s:%s' % (usuario_id, produto_id))
+    return produto, True
+
+
+def remover_lista_desejo(usuario_id, produto_id):
+    """Remove apenas o produto que pertence à lista do usuário."""
+    return db((db.lista_desejo.usuario == usuario_id) &
+              (db.lista_desejo.produto == produto_id)).delete()
+
+
+def resumo_avaliacoes(produto_ids):
+    """Retorna nota média e quantidade de avaliações por produto."""
+    if not produto_ids:
+        return {}
+    soma = db.avaliacao_produto.nota.sum()
+    quantidade = db.avaliacao_produto.id.count()
+    linhas = db(db.avaliacao_produto.produto.belongs(produto_ids)).select(
+        db.avaliacao_produto.produto, soma, quantidade,
+        groupby=db.avaliacao_produto.produto)
+    resultado = {}
+    for linha in linhas:
+        total_avaliacoes = int(linha[quantidade])
+        resultado[linha.avaliacao_produto.produto] = dict(
+            media=float(linha[soma]) / total_avaliacoes,
+            quantidade=total_avaliacoes)
+    return resultado
+
+
+def cliente_pode_avaliar(usuario_id, produto_id):
+    """Só permite avaliar um produto comprado e já entregue ao cliente."""
+    return bool(db((db.pedido.cliente == usuario_id) &
+                   (db.pedido.status == 'entregue') &
+                   (db.pedido_item.pedido == db.pedido.id) &
+                   (db.pedido_item.produto == produto_id)).count())
+
+
+def produto_para_json(p, avaliacao=None):
     """Dicionário serializável de um produto (usado pela API/React)."""
     return dict(id=p.id, codigo=p.codigo, nome=p.nome, descricao=p.descricao or '',
                 preco=float(p.preco), preco_fmt=moeda(p.preco), estoque=p.estoque,
-                prazo_dias=p.prazo_dias, ativo=bool(p.ativo),
+                prazo_dias=p.prazo_dias, ativo=bool(p.ativo), console=p.console or '',
+                estado=p.estado, avaliacao_media=(avaliacao or {}).get('media'),
+                avaliacao_quantidade=(avaliacao or {}).get('quantidade', 0),
                 categoria_id=p.categoria,
                 categoria=(p.categoria.nome if p.categoria else ''),
                 imagem=url_imagem(p, mini=True), imagem_grande=url_imagem(p, mini=False),

@@ -5,6 +5,7 @@
 #  (o token é o mesmo dos formulários; ver static/js/loja.js -> LojaAPI).
 # =============================================================================
 import json
+from decimal import Decimal, InvalidOperation
 
 
 def _json(dados, status=200):
@@ -25,6 +26,18 @@ def _erro(mensagem, status=400):
     return _json(dict(ok=False, erro=mensagem), status)
 
 
+def _preco_filtro(valor, rotulo):
+    if not valor:
+        return None
+    try:
+        preco = Decimal(str(valor).strip().replace(',', '.'))
+    except InvalidOperation:
+        raise ValueError('%s inválido.' % rotulo)
+    if not preco.is_finite() or preco < 0 or preco > 999999:
+        raise ValueError('%s inválido.' % rotulo)
+    return preco
+
+
 def _exigir(*papeis):
     """Login + papel + POST seguro (para chamadas que alteram dados)."""
     if not auth.user:
@@ -40,18 +53,62 @@ def _exigir(*papeis):
 #  Catálogo (público)
 # -----------------------------------------------------------------------------
 def produtos():
-    """GET api/produtos?q=texto&categoria=id  -> lista para o <Catalogo/>."""
+    """GET api/produtos -> catálogo com filtros avançados para o <Catalogo/>."""
     query = db.produto.ativo == True
     q = (request.vars.q or '').strip()
     if q:
         padrao = '%' + q + '%'
         query &= (db.produto.nome.ilike(padrao) | db.produto.descricao.ilike(padrao) |
                   db.produto.codigo.ilike(padrao))
-    if request.vars.categoria:
-        query &= db.produto.categoria == request.vars.categoria
-    lista = [produto_para_json(p) for p in db(query).select(orderby=db.produto.nome)]
+    categoria = request.vars.categoria or ''
+    if categoria:
+        try:
+            categoria_id = int(categoria)
+        except (ValueError, TypeError):
+            return _erro('Categoria inválida.')
+        if not db.categoria[categoria_id]:
+            return _erro('Categoria inválida.')
+        query &= db.produto.categoria == categoria_id
+    console = request.vars.console or ''
+    if console == 'sem_console':
+        query &= ((db.produto.console == '') | (db.produto.console == None))
+    elif console:
+        if console not in CONSOLES:
+            return _erro('Console inválido.')
+        query &= db.produto.console == console
+    estado = request.vars.estado or ''
+    if estado:
+        if estado not in ESTADOS_PRODUTO:
+            return _erro('Estado inválido.')
+        query &= db.produto.estado == estado
+    try:
+        preco_min = _preco_filtro(request.vars.preco_min, 'Preço mínimo')
+        preco_max = _preco_filtro(request.vars.preco_max, 'Preço máximo')
+    except ValueError as e:
+        return _erro(str(e))
+    if preco_min is not None and preco_max is not None and preco_min > preco_max:
+        return _erro('O preço mínimo não pode ser maior que o preço máximo.')
+    if preco_min is not None:
+        query &= db.produto.preco >= preco_min
+    if preco_max is not None:
+        query &= db.produto.preco <= preco_max
+    avaliacao_minima = request.vars.avaliacao_minima or ''
+    if avaliacao_minima:
+        try:
+            avaliacao_minima = int(avaliacao_minima)
+        except (ValueError, TypeError):
+            return _erro('Avaliação mínima inválida.')
+        if not 1 <= avaliacao_minima <= 5:
+            return _erro('Avaliação mínima deve estar entre 1 e 5.')
+    produtos_filtrados = db(query).select(orderby=db.produto.nome)
+    avaliacoes = resumo_avaliacoes([p.id for p in produtos_filtrados])
+    if avaliacao_minima:
+        produtos_filtrados = [p for p in produtos_filtrados
+                              if avaliacoes.get(p.id, {}).get('media', 0) >= avaliacao_minima]
+    lista = [produto_para_json(p, avaliacoes.get(p.id)) for p in produtos_filtrados]
     categorias = [dict(id=c.id, nome=c.nome) for c in db(db.categoria).select(orderby=db.categoria.nome)]
     return _json(dict(ok=True, produtos=lista, categorias=categorias,
+                      consoles=CONSOLES, estados=ESTADOS_PRODUTO,
                       logado=bool(auth.user), pode_comprar=tem_papel('cliente'),
                       no_carrinho=quantidade_carrinho(auth.user_id)))
 

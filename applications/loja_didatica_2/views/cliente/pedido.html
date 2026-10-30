@@ -35,7 +35,7 @@ indice = dict((s, i) for i, (s, _) in enumerate(etapas)).get(pedido.status, -1)}
         <thead><tr><th>Produto</th><th class="num">Qtd</th><th class="num">Subtotal</th></tr></thead>
         <tbody>
         {{for i in itens:}}
-          <tr><td>{{=i.nome_produto}} <span class="mono pequeno texto-3">{{=i.codigo_produto}}</span></td><td class="num">{{=i.quantidade}} × {{=moeda(i.preco_unitario)}}</td><td class="num">{{=moeda(i.subtotal)}}</td></tr>
+          <tr><td>{{if i.produto:}}<a href="{{=URL('default', 'produto', args=[i.produto])}}">{{=i.nome_produto}}</a>{{else:}}{{=i.nome_produto}}{{pass}} <span class="mono pequeno texto-3">{{=i.codigo_produto}}</span>{{if pedido.status == 'entregue' and i.produto:}}<br><a class="pequeno" href="{{=URL('default', 'produto', args=[i.produto])}}">Avaliar produto</a>{{pass}}</td><td class="num">{{=i.quantidade}} × {{=moeda(i.preco_unitario)}}</td><td class="num">{{=moeda(i.subtotal)}}</td></tr>
         {{pass}}
           <tr><td colspan="2"><strong>Total</strong></td><td class="num"><strong>{{=moeda(pedido.total)}}</strong></td></tr>
         </tbody>

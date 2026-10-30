@@ -33,6 +33,67 @@ def adicionar():
 
 
 @requer_papel('cliente')
+def avaliar_produto():
+    """Cria ou atualiza a avaliação de um produto já entregue ao cliente."""
+    exigir_post_seguro()
+    produto_id = request.args(0, cast=int) if request.args else None
+    p = db.produto[produto_id] if produto_id else None
+    try:
+        nota = int(request.vars.nota or '')
+    except (ValueError, TypeError):
+        nota = 0
+    if not p or not cliente_pode_avaliar(auth.user_id, produto_id):
+        avisar('erro', 'Só é possível avaliar produtos de pedidos já entregues.')
+    elif not 1 <= nota <= 5:
+        avisar('erro', 'Selecione uma nota entre 1 e 5 estrelas.')
+    else:
+        existente = db((db.avaliacao_produto.produto == produto_id) &
+                       (db.avaliacao_produto.cliente == auth.user_id)).select().first()
+        if existente:
+            existente.update_record(nota=nota, atualizado_em=request.now)
+            avisar('ok', 'Sua avaliação foi atualizada.')
+        else:
+            db.avaliacao_produto.insert(produto=produto_id, cliente=auth.user_id,
+                                        nota=nota,
+                                        chave='%s:%s' % (auth.user_id, produto_id))
+            avisar('ok', 'Obrigado por avaliar este produto!')
+    redirect(URL('default', 'produto', args=[produto_id] if p else []))
+
+
+@requer_papel('cliente')
+def desejo_adicionar():
+    """Adiciona o produto da página de detalhes à lista de desejos."""
+    exigir_post_seguro()
+    produto_id = request.args(0, cast=int) if request.args else None
+    try:
+        produto, criado = adicionar_lista_desejo(auth.user_id, produto_id)
+        avisar('ok' if criado else 'info',
+               ('"%s" adicionado à sua lista de desejos.' if criado else
+                '"%s" já está na sua lista de desejos.') % produto.nome)
+    except (ErroDeNegocio, ValueError, TypeError) as e:
+        avisar('erro', str(e) or 'Não foi possível adicionar o produto.')
+    redirect(URL('default', 'produto', args=[produto_id]))
+
+
+@requer_papel('cliente')
+def desejo_remover():
+    """Remove um produto da lista do cliente autenticado."""
+    exigir_post_seguro()
+    produto_id = request.args(0, cast=int) if request.args else None
+    removidos = remover_lista_desejo(auth.user_id, produto_id)
+    avisar('info' if removidos else 'erro',
+           'Produto removido da sua lista de desejos.' if removidos else
+           'Produto não encontrado na sua lista de desejos.')
+    redirect(URL('lista_desejo'))
+
+
+@requer_papel('cliente')
+def lista_desejo():
+    """Exibe apenas os produtos salvos pelo cliente autenticado."""
+    return dict(itens=itens_lista_desejo(auth.user_id))
+
+
+@requer_papel('cliente')
 def checkout():
     """Fecha o pedido a partir do carrinho (POST clássico; a versão React usa
     api/carrinho_finalizar) e redireciona para a tela do PIX."""

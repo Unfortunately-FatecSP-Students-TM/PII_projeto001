@@ -28,7 +28,7 @@ def _ativo(controller, *funcoes):
   <div class="topo-inner">
     <a class="marca" href="{{=URL('default', 'index')}}">
       <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M4 7h4l3 14h14l3-10H10" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/><circle cx="13" cy="26" r="2.2" fill="#fff"/><circle cx="23" cy="26" r="2.2" fill="#fff"/></svg>
-      <span>{{=NOME_LOJA}}<small>web2py · SQLite · React</small></span>
+      <span>{{=NOME_LOJA}}<small>Jogos clássicos e colecionáveis</small></span>
     </a>
     <div class="topo-direita">
       {{if auth.user:}}
@@ -54,6 +54,7 @@ def _ativo(controller, *funcoes):
       {{if tem_papel('cliente'):}}
       <a class="{{=_ativo('cliente', 'carrinho')}}" href="{{=URL('cliente', 'carrinho')}}">Carrinho
         <span id="badge-carrinho" class="badge {{='' if _nav['carrinho'] else 'vazio'}}">{{=_nav['carrinho']}}</span></a>
+      <a class="{{=_ativo('cliente', 'lista_desejo')}}" href="{{=URL('cliente', 'lista_desejo')}}">Lista de desejos</a>
       <a class="{{=_ativo('cliente', 'pedidos', 'pedido', 'pix', 'cancelar', 'reclamacao')}}" href="{{=URL('cliente', 'pedidos')}}">Meus pedidos</a>
       <a class="{{=_ativo('cliente', 'mensagens')}}" href="{{=URL('cliente', 'mensagens')}}">Mensagens</a>
       {{pass}}

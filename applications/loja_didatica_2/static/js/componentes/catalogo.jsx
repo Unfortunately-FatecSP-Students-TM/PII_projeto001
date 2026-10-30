@@ -33,6 +33,11 @@ function CardProduto({ p, podeComprar, logado, aoAdicionar }) {
         <span className="categoria">{p.categoria || 'Sem categoria'} · {p.codigo}</span>
         <a className="nome" href={p.url}>{p.nome}</a>
         <p className="descricao">{p.descricao}</p>
+        <span className="pequeno">Estado: {p.estado}</span>
+        {p.console && <span className="pequeno">Console: {p.console}</span>}
+        <span className="avaliacao">
+          {p.avaliacao_media ? '★ ' + p.avaliacao_media.toFixed(1) + ' / 5 (' + p.avaliacao_quantidade + ')' : 'Sem avaliações'}
+        </span>
         <div className="rodape-card">
           <span className="preco">{p.preco_fmt}</span>
           {estoqueInfo}
@@ -64,22 +69,48 @@ function CardProduto({ p, podeComprar, logado, aoAdicionar }) {
 function Catalogo({ buscaInicial }) {
   const [busca, setBusca] = useState(buscaInicial || '');
   const [categoria, setCategoria] = useState('');
-  const [dados, setDados] = useState({ produtos: [], categorias: [], pode_comprar: false, logado: false });
+  const [consoleProduto, setConsoleProduto] = useState('');
+  const [precoMin, setPrecoMin] = useState('');
+  const [precoMax, setPrecoMax] = useState('');
+  const [avaliacaoMinima, setAvaliacaoMinima] = useState('');
+  const [estado, setEstado] = useState('');
+  const [dados, setDados] = useState({
+    produtos: [], categorias: [], consoles: [], estados: [], pode_comprar: false, logado: false
+  });
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState('');
   const temporizador = useRef(null);
+  const requisicaoAtual = useRef(0);
 
-  // recarrega a lista quando busca/categoria mudam (com atraso de 300 ms ao digitar)
+  // recarrega o catálogo quando qualquer filtro muda
   useEffect(() => {
     clearTimeout(temporizador.current);
     temporizador.current = setTimeout(async () => {
+      const requisicao = ++requisicaoAtual.current;
       setCarregando(true);
-      const r = await LojaAPI.get('produtos', null, { q: busca, categoria });
+      const r = await LojaAPI.get('produtos', null, {
+        q: busca, categoria, console: consoleProduto, preco_min: precoMin,
+        preco_max: precoMax, avaliacao_minima: avaliacaoMinima, estado
+      });
+      if (requisicao !== requisicaoAtual.current) return;
       if (r.ok) { setDados(r); setErro(''); } else { setErro(r.erro || 'Não foi possível carregar o catálogo.'); }
       setCarregando(false);
     }, busca ? 300 : 0);
-    return () => clearTimeout(temporizador.current);
-  }, [busca, categoria]);
+    return () => {
+      clearTimeout(temporizador.current);
+      requisicaoAtual.current += 1;
+    };
+  }, [busca, categoria, consoleProduto, precoMin, precoMax, avaliacaoMinima, estado]);
+
+  function limparFiltros() {
+    setBusca('');
+    setCategoria('');
+    setConsoleProduto('');
+    setPrecoMin('');
+    setPrecoMax('');
+    setAvaliacaoMinima('');
+    setEstado('');
+  }
 
   async function adicionar(p, qtd) {
     const r = await LojaAPI.post('carrinho_adicionar', { produto_id: p.id, quantidade: qtd });
@@ -96,22 +127,62 @@ function Catalogo({ buscaInicial }) {
       <div className="barra-busca">
         <input type="search" placeholder="Buscar por nome, descrição ou código" value={busca}
                onChange={e => setBusca(e.target.value)} aria-label="Buscar produtos" />
-        {busca && <button type="button" className="btn btn-secundario" onClick={() => setBusca('')}>Limpar</button>}
       </div>
-      <div className="chips" role="tablist" aria-label="Categorias">
-        <button type="button" className={'chip' + (categoria === '' ? ' ativo' : '')} onClick={() => setCategoria('')}>Todas</button>
-        {dados.categorias.map(c => (
-          <button key={c.id} type="button" className={'chip' + (String(categoria) === String(c.id) ? ' ativo' : '')}
-                  onClick={() => setCategoria(String(c.id))}>{c.nome}</button>
-        ))}
-      </div>
+      <section className="cartao filtros-avancados" aria-label="Busca avançada">
+        <div className="filtros-titulo">
+          <h2>Busca avançada</h2>
+          <button type="button" className="btn btn-secundario" onClick={limparFiltros}>Limpar filtros</button>
+        </div>
+        <div className="filtros-grade">
+          <div className="campo">
+            <label htmlFor="filtro-console">Console</label>
+            <select id="filtro-console" value={consoleProduto} onChange={e => setConsoleProduto(e.target.value)}>
+              <option value="">Todos os consoles</option>
+              <option value="sem_console">Sem console</option>
+              {dados.consoles.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          <div className="campo">
+            <label htmlFor="filtro-preco-min">Preço mínimo (R$)</label>
+            <input id="filtro-preco-min" type="number" min="0" step="0.01" value={precoMin}
+                   onChange={e => setPrecoMin(e.target.value)} />
+          </div>
+          <div className="campo">
+            <label htmlFor="filtro-preco-max">Preço máximo (R$)</label>
+            <input id="filtro-preco-max" type="number" min="0" step="0.01" value={precoMax}
+                   onChange={e => setPrecoMax(e.target.value)} />
+          </div>
+          <div className="campo">
+            <label htmlFor="filtro-categoria">Categoria</label>
+            <select id="filtro-categoria" value={categoria} onChange={e => setCategoria(e.target.value)}>
+              <option value="">Todas as categorias</option>
+              {dados.categorias.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </div>
+          <div className="campo">
+            <label htmlFor="filtro-avaliacao">Avaliação mínima</label>
+            <select id="filtro-avaliacao" value={avaliacaoMinima}
+                    onChange={e => setAvaliacaoMinima(e.target.value)}>
+              <option value="">Qualquer avaliação</option>
+              {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n} {n === 1 ? 'estrela' : 'estrelas'} ou mais</option>)}
+            </select>
+          </div>
+          <div className="campo">
+            <label htmlFor="filtro-estado">Estado</label>
+            <select id="filtro-estado" value={estado} onChange={e => setEstado(e.target.value)}>
+              <option value="">Todos os estados</option>
+              {dados.estados.map(e => <option key={e} value={e}>{e}</option>)}
+            </select>
+          </div>
+        </div>
+      </section>
       {erro && <div className="aviso aviso-erro">{erro}</div>}
       {carregando && dados.produtos.length === 0 ? (
         <p className="carregando">Carregando produtos…</p>
       ) : dados.produtos.length === 0 ? (
         <div className="cartao vazio-caixa">
           <p>Nenhum produto encontrado{busca ? ' para "' + busca + '"' : ''}.</p>
-          <button type="button" className="btn btn-secundario" onClick={() => { setBusca(''); setCategoria(''); }}>Ver todos os produtos</button>
+          <button type="button" className="btn btn-secundario" onClick={limparFiltros}>Ver todos os produtos</button>
         </div>
       ) : (
         <div className="grade-produtos" aria-busy={carregando}>

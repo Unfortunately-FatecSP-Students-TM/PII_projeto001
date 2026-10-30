@@ -1,7 +1,4 @@
-/* GERADO AUTOMATICAMENTE a partir de ../catalogo.jsx pelo Babel (preset react).
-   fonte: catalogo.jsx sha256:a9e6c71ae47bcf08c73e1019356cc5e5b31e089ad2b47dea53c5f3c6c9146df5
-   Não edite este arquivo: edite o .jsx e recompile (node compilar_jsx.js) — ou
-   simplesmente salve o .jsx: a página vê que o hash mudou e compila com o Babel. */
+/* GERADO a partir de catalogo.jsx; sha256:0d28fb3119d3b80ba1ecb14e223cb13e4a16463ebb2e2ca9f1423b36b87ce0fb */
 /* =============================================================================
    <Catalogo/> — grade de produtos com busca ao digitar e filtro por categoria.
    Consome GET api/produtos e, ao comprar, POST api/carrinho_adicionar.
@@ -55,7 +52,13 @@
       href: p.url
     }, p.nome), /*#__PURE__*/React.createElement("p", {
       className: "descricao"
-    }, p.descricao), /*#__PURE__*/React.createElement("div", {
+    }, p.descricao), /*#__PURE__*/React.createElement("span", {
+      className: "pequeno"
+    }, "Estado: ", p.estado), p.console && /*#__PURE__*/React.createElement("span", {
+      className: "pequeno"
+    }, "Console: ", p.console), /*#__PURE__*/React.createElement("span", {
+      className: "avaliacao"
+    }, p.avaliacao_media ? '★ ' + p.avaliacao_media.toFixed(1) + ' / 5 (' + p.avaliacao_quantidade + ')' : 'Sem avaliações'), /*#__PURE__*/React.createElement("div", {
       className: "rodape-card"
     }, /*#__PURE__*/React.createElement("span", {
       className: "preco"
@@ -99,25 +102,40 @@
   }) {
     const [busca, setBusca] = useState(buscaInicial || '');
     const [categoria, setCategoria] = useState('');
+    const [consoleProduto, setConsoleProduto] = useState('');
+    const [precoMin, setPrecoMin] = useState('');
+    const [precoMax, setPrecoMax] = useState('');
+    const [avaliacaoMinima, setAvaliacaoMinima] = useState('');
+    const [estado, setEstado] = useState('');
     const [dados, setDados] = useState({
       produtos: [],
       categorias: [],
+      consoles: [],
+      estados: [],
       pode_comprar: false,
       logado: false
     });
     const [carregando, setCarregando] = useState(true);
     const [erro, setErro] = useState('');
     const temporizador = useRef(null);
+    const requisicaoAtual = useRef(0);
 
-    // recarrega a lista quando busca/categoria mudam (com atraso de 300 ms ao digitar)
+    // recarrega o catálogo quando qualquer filtro muda
     useEffect(() => {
       clearTimeout(temporizador.current);
       temporizador.current = setTimeout(async () => {
+        const requisicao = ++requisicaoAtual.current;
         setCarregando(true);
         const r = await LojaAPI.get('produtos', null, {
           q: busca,
-          categoria
+          categoria,
+          console: consoleProduto,
+          preco_min: precoMin,
+          preco_max: precoMax,
+          avaliacao_minima: avaliacaoMinima,
+          estado
         });
+        if (requisicao !== requisicaoAtual.current) return;
         if (r.ok) {
           setDados(r);
           setErro('');
@@ -126,8 +144,20 @@
         }
         setCarregando(false);
       }, busca ? 300 : 0);
-      return () => clearTimeout(temporizador.current);
-    }, [busca, categoria]);
+      return () => {
+        clearTimeout(temporizador.current);
+        requisicaoAtual.current += 1;
+      };
+    }, [busca, categoria, consoleProduto, precoMin, precoMax, avaliacaoMinima, estado]);
+    function limparFiltros() {
+      setBusca('');
+      setCategoria('');
+      setConsoleProduto('');
+      setPrecoMin('');
+      setPrecoMax('');
+      setAvaliacaoMinima('');
+      setEstado('');
+    }
     async function adicionar(p, qtd) {
       const r = await LojaAPI.post('carrinho_adicionar', {
         produto_id: p.id,
@@ -148,24 +178,94 @@
       value: busca,
       onChange: e => setBusca(e.target.value),
       "aria-label": "Buscar produtos"
-    }), busca && /*#__PURE__*/React.createElement("button", {
+    })), /*#__PURE__*/React.createElement("section", {
+      className: "cartao filtros-avancados",
+      "aria-label": "Busca avan\xE7ada"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "filtros-titulo"
+    }, /*#__PURE__*/React.createElement("h2", null, "Busca avan\xE7ada"), /*#__PURE__*/React.createElement("button", {
       type: "button",
       className: "btn btn-secundario",
-      onClick: () => setBusca('')
-    }, "Limpar")), /*#__PURE__*/React.createElement("div", {
-      className: "chips",
-      role: "tablist",
-      "aria-label": "Categorias"
-    }, /*#__PURE__*/React.createElement("button", {
-      type: "button",
-      className: 'chip' + (categoria === '' ? ' ativo' : ''),
-      onClick: () => setCategoria('')
-    }, "Todas"), dados.categorias.map(c => /*#__PURE__*/React.createElement("button", {
+      onClick: limparFiltros
+    }, "Limpar filtros")), /*#__PURE__*/React.createElement("div", {
+      className: "filtros-grade"
+    }, /*#__PURE__*/React.createElement("div", {
+      className: "campo"
+    }, /*#__PURE__*/React.createElement("label", {
+      htmlFor: "filtro-console"
+    }, "Console"), /*#__PURE__*/React.createElement("select", {
+      id: "filtro-console",
+      value: consoleProduto,
+      onChange: e => setConsoleProduto(e.target.value)
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "Todos os consoles"), /*#__PURE__*/React.createElement("option", {
+      value: "sem_console"
+    }, "Sem console"), dados.consoles.map(c => /*#__PURE__*/React.createElement("option", {
+      key: c,
+      value: c
+    }, c)))), /*#__PURE__*/React.createElement("div", {
+      className: "campo"
+    }, /*#__PURE__*/React.createElement("label", {
+      htmlFor: "filtro-preco-min"
+    }, "Pre\xE7o m\xEDnimo (R$)"), /*#__PURE__*/React.createElement("input", {
+      id: "filtro-preco-min",
+      type: "number",
+      min: "0",
+      step: "0.01",
+      value: precoMin,
+      onChange: e => setPrecoMin(e.target.value)
+    })), /*#__PURE__*/React.createElement("div", {
+      className: "campo"
+    }, /*#__PURE__*/React.createElement("label", {
+      htmlFor: "filtro-preco-max"
+    }, "Pre\xE7o m\xE1ximo (R$)"), /*#__PURE__*/React.createElement("input", {
+      id: "filtro-preco-max",
+      type: "number",
+      min: "0",
+      step: "0.01",
+      value: precoMax,
+      onChange: e => setPrecoMax(e.target.value)
+    })), /*#__PURE__*/React.createElement("div", {
+      className: "campo"
+    }, /*#__PURE__*/React.createElement("label", {
+      htmlFor: "filtro-categoria"
+    }, "Categoria"), /*#__PURE__*/React.createElement("select", {
+      id: "filtro-categoria",
+      value: categoria,
+      onChange: e => setCategoria(e.target.value)
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "Todas as categorias"), dados.categorias.map(c => /*#__PURE__*/React.createElement("option", {
       key: c.id,
-      type: "button",
-      className: 'chip' + (String(categoria) === String(c.id) ? ' ativo' : ''),
-      onClick: () => setCategoria(String(c.id))
-    }, c.nome))), erro && /*#__PURE__*/React.createElement("div", {
+      value: c.id
+    }, c.nome)))), /*#__PURE__*/React.createElement("div", {
+      className: "campo"
+    }, /*#__PURE__*/React.createElement("label", {
+      htmlFor: "filtro-avaliacao"
+    }, "Avalia\xE7\xE3o m\xEDnima"), /*#__PURE__*/React.createElement("select", {
+      id: "filtro-avaliacao",
+      value: avaliacaoMinima,
+      onChange: e => setAvaliacaoMinima(e.target.value)
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "Qualquer avalia\xE7\xE3o"), [1, 2, 3, 4, 5].map(n => /*#__PURE__*/React.createElement("option", {
+      key: n,
+      value: n
+    }, n, " ", n === 1 ? 'estrela' : 'estrelas', " ou mais")))), /*#__PURE__*/React.createElement("div", {
+      className: "campo"
+    }, /*#__PURE__*/React.createElement("label", {
+      htmlFor: "filtro-estado"
+    }, "Estado"), /*#__PURE__*/React.createElement("select", {
+      id: "filtro-estado",
+      value: estado,
+      onChange: e => setEstado(e.target.value)
+    }, /*#__PURE__*/React.createElement("option", {
+      value: ""
+    }, "Todos os estados"), dados.estados.map(e => /*#__PURE__*/React.createElement("option", {
+      key: e,
+      value: e
+    }, e)))))), erro && /*#__PURE__*/React.createElement("div", {
       className: "aviso aviso-erro"
     }, erro), carregando && dados.produtos.length === 0 ? /*#__PURE__*/React.createElement("p", {
       className: "carregando"
@@ -174,10 +274,7 @@
     }, /*#__PURE__*/React.createElement("p", null, "Nenhum produto encontrado", busca ? ' para "' + busca + '"' : '', "."), /*#__PURE__*/React.createElement("button", {
       type: "button",
       className: "btn btn-secundario",
-      onClick: () => {
-        setBusca('');
-        setCategoria('');
-      }
+      onClick: limparFiltros
     }, "Ver todos os produtos")) : /*#__PURE__*/React.createElement("div", {
       className: "grade-produtos",
       "aria-busy": carregando
